@@ -27,3 +27,4 @@ package-lock.json.lock
 *.log
 *.tmp
 *.bak
+*.tsbuildinfo
