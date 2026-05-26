@@ -3,6 +3,7 @@ import { useSearch, useSources } from "./hooks/useSearch";
 import SearchBar from "./components/SearchBar";
 import SourceManager from "./components/SourceManager";
 import ResultPanel from "./components/ResultPanel";
+import SplashScreen from "./components/SplashScreen";
 
 /* ── Settings types ─────────────────────────────────────── */
 type Theme = "dark" | "light";
@@ -173,7 +174,9 @@ export default function App() {
   const handleSearch = useCallback((q: string) => { search(q); }, [search]);
 
   return (
-    <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
+    <>
+      <SplashScreen />
+      <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
       {/* ── Mobile hamburger ─────────────────────────── */}
       <button
         style={{
@@ -349,5 +352,6 @@ export default function App() {
         )}
       </main>
     </div>
+    </>
   );
 }
