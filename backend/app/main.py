@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "*")
+
 app = FastAPI(
     title="Aggregated Search Engine",
     version="1.0.0",
@@ -19,7 +22,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
