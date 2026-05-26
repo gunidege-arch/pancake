@@ -109,10 +109,7 @@ export default function SourceManager({ sources, onAdd, onDelete }: Props) {
               }}
               className="source-delete-btn"
               title="删除"
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-              onMouseLeave={(e) => {
-                // keep visible only if parent hovered
-              }}
+              onMouseEnter={(_e) => { _e.currentTarget.style.opacity = "1"; }}
             >
               <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

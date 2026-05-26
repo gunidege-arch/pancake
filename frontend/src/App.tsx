@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useMemo } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useSearch, useSources } from "./hooks/useSearch";
 import SearchBar from "./components/SearchBar";
 import SourceManager from "./components/SourceManager";
@@ -164,12 +164,6 @@ export default function App() {
     document.body.style.background = settings.theme === "dark" ? "#0d0d12" : "#f5f6f8";
     document.body.style.color = settings.theme === "dark" ? "#ececf1" : "#1f2937";
   }, [settings.theme]);
-
-  /* columns CSS var */
-  const gridStyle = useMemo(() => {
-    const cols = parseInt(settings.columns, 10);
-    return { "--user-cols": cols } as React.CSSProperties;
-  }, [settings.columns]);
 
   const handleSearch = useCallback((q: string) => { search(q); }, [search]);
 
