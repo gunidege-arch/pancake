@@ -7,6 +7,7 @@ import VideoModal from "./VideoModal";
 interface Props {
   results: SearchResultItem[];
   query: string;
+  columns: string;
 }
 
 interface ModalData {
@@ -16,32 +17,43 @@ interface ModalData {
   sourceName: string;
 }
 
-export default function ResultPanel({ results, query }: Props) {
+export default function ResultPanel({ results, query, columns }: Props) {
   const [modal, setModal] = useState<ModalData | null>(null);
   const openModal = useCallback((data: ModalData) => setModal(data), []);
   const closeModal = useCallback(() => setModal(null), []);
 
-  // ── Normalise everything before rendering ─────────────────
   const cards: NormalizedCard[] = useMemo(
     () => results.map(normalizeResult),
     [results],
   );
 
   if (cards.length === 0) {
-    return <p className="text-gray-400 text-center py-8">未配置搜索源，请先在侧边栏添加。</p>;
+    return (
+      <p style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", fontSize: "0.88rem" }}>
+        未配置搜索源，请先在侧边栏添加。
+      </p>
+    );
   }
+
+  const colsNum = parseInt(columns, 10);
 
   return (
     <div>
-      <p className="text-sm text-gray-500 mb-4">
+      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: "0.75rem", paddingLeft: "0.25rem" }}>
         搜索 &quot;{query}&quot; — 共 {cards.length} 个来源
       </p>
 
-      {/* ── Unified grid ────────────────────────────────── */}
-      <div className="results-grid">
+      <div
+        className="results-grid"
+        style={{
+          gridTemplateColumns: `repeat(${colsNum}, 1fr)`,
+          maxWidth: colsNum === 2 ? "100%" : colsNum === 3 ? 900 : 1200,
+          margin: "0 auto",
+        }}
+      >
         {cards.map((card, idx) => {
           const handleOpen = () => {
-            if (card.error) return; // error cards are non-interactive
+            if (card.error) return;
             if (card.videoUrl) {
               openModal({
                 title: card.title,
@@ -64,7 +76,6 @@ export default function ResultPanel({ results, query }: Props) {
         })}
       </div>
 
-      {/* ── Modal ────────────────────────────────────────── */}
       <VideoModal
         open={modal !== null}
         onClose={closeModal}

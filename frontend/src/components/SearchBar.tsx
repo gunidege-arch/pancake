@@ -7,6 +7,7 @@ interface Props {
 
 export default function SearchBar({ onSearch, loading }: Props) {
   const [value, setValue] = useState("");
+  const [focused, setFocused] = useState(false);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -14,30 +15,91 @@ export default function SearchBar({ onSearch, loading }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 max-w-2xl mx-auto">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="输入搜索关键词..."
-        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
-        autoFocus
-      />
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        display: "flex",
+        gap: "0.5rem",
+        alignItems: "center",
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        {/* search icon inside input */}
+        <svg
+          style={{
+            position: "absolute",
+            left: 12,
+            width: 16,
+            height: 16,
+            color: focused ? "var(--accent)" : "var(--text-muted)",
+            transition: "color 0.2s",
+            pointerEvents: "none",
+          }}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="搜索关键词..."
+          className="search-input"
+          style={{
+            width: "100%",
+            height: 40,
+            paddingLeft: 38,
+            paddingRight: 12,
+            borderRadius: 20,
+            fontSize: "0.875rem",
+            transition: "border-color 0.2s, box-shadow 0.2s",
+          }}
+          autoFocus
+        />
+      </div>
+
+      {/* search button — creative micro-interaction */}
       <button
         type="submit"
         disabled={loading || !value.trim()}
-        className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className={`search-btn ${!loading && value.trim() ? "search-btn-glow" : ""}`}
+        style={{
+          height: 40,
+          width: 72,
+          borderRadius: 20,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: loading || !value.trim() ? "not-allowed" : "pointer",
+          fontSize: "0.85rem",
+        }}
       >
         {loading ? (
-          <span className="inline-flex items-center gap-1">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            搜索中
-          </span>
+          <svg
+            style={{ width: 18, height: 18, animation: "spin-slow 1.2s linear infinite" }}
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle style={{ opacity: 0.2 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3.5" />
+            <path style={{ opacity: 0.7 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
         ) : (
-          "搜索"
+          <span style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transition: "transform 0.2s" }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </span>
         )}
       </button>
     </form>
