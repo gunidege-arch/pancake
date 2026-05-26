@@ -172,16 +172,30 @@ def _is_unreadable(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Playwright browser (lazy singleton)
+# Playwright browser (lazy singleton) — optional, local-only
 # ---------------------------------------------------------------------------
 _browser = None
 _browser_lock = asyncio.Lock()
 _browser_semaphore = asyncio.Semaphore(3)  # limit concurrent browser tabs
+_playwright_available = None  # tri-state: None=unchecked, True/False
+
+
+def _check_playwright_available() -> bool:
+    global _playwright_available
+    if _playwright_available is None:
+        try:
+            import playwright  # noqa: F401
+            _playwright_available = True
+        except ImportError:
+            _playwright_available = False
+    return _playwright_available
 
 
 async def _get_browser():
     """Return a shared headless Chromium browser instance."""
     global _browser
+    if not _check_playwright_available():
+        return None
     if _browser is None:
         async with _browser_lock:
             if _browser is None:
@@ -197,7 +211,13 @@ async def _get_browser():
 
 async def _fetch_with_browser(url: str) -> str:
     """Fetch a JS-rendered page using Playwright.  Returns the final HTML."""
+    if not _check_playwright_available():
+        raise RuntimeError("Playwright is not installed (Vercel/serverless environment)")
+
     browser = await _get_browser()
+    if browser is None:
+        raise RuntimeError("Playwright browser could not be started")
+
     async with _browser_semaphore:
         context = await browser.new_context(
             user_agent=BROWSER_HEADERS["User-Agent"],
@@ -207,7 +227,6 @@ async def _fetch_with_browser(url: str) -> str:
         page = await context.new_page()
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            # Extra wait for async content
             await asyncio.sleep(1.5)
             return await page.content()
         finally:
@@ -227,8 +246,14 @@ async def _fetch_html(client: httpx.AsyncClient, url: str) -> str:
     needs_js = _needs_js_render(url)
 
     if needs_js:
-        html = await _fetch_with_browser(url)
-        return html
+        if _check_playwright_available():
+            try:
+                return await _fetch_with_browser(url)
+            except Exception as e:
+                print(f"[SEARCH WARN] Playwright render failed for '{url}': {e}")
+                raise
+        else:
+            print(f"[SEARCH INFO] JS-rendered host '{url}' but Playwright unavailable — using httpx fallback")
 
     # Fast path: plain httpx  -------------------------------------------
     await asyncio.sleep(random.uniform(0.3, 1.5))
@@ -244,11 +269,14 @@ async def _fetch_html(client: httpx.AsyncClient, url: str) -> str:
 
     # If the result looks like a JS shell, try Playwright as fallback
     if _is_unreadable(text):
-        print(f"[SEARCH INFO] httpx returned shell for '{url}', trying Playwright…")
-        try:
-            text = await _fetch_with_browser(url)
-        except Exception as e:
-            print(f"[SEARCH WARN] Playwright fallback also failed: {e}")
+        if _check_playwright_available():
+            print(f"[SEARCH INFO] httpx returned shell for '{url}', trying Playwright…")
+            try:
+                text = await _fetch_with_browser(url)
+            except Exception as e:
+                print(f"[SEARCH WARN] Playwright fallback also failed: {e}")
+        else:
+            print(f"[SEARCH WARN] httpx returned shell for '{url}' and Playwright is not available")
 
     return text
 
