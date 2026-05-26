@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import type { SearchResponse, SearchSource } from "../types";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = BASE_URL ? `${BASE_URL}/api` : "/api";
 
 export function useSearch() {
   const [query, setQuery] = useState("");
