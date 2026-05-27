@@ -1,9 +1,12 @@
 import { useEffect, useCallback, useState } from "react";
 import { useSearch, useSources } from "./hooks/useSearch";
+import { useBookmarks } from "./hooks/useBookmarks";
 import SearchBar from "./components/SearchBar";
 import SourceManager from "./components/SourceManager";
 import ResultPanel from "./components/ResultPanel";
 import SplashScreen from "./components/SplashScreen";
+import BookmarksPanel from "./components/BookmarksPanel";
+import ToastContainer from "./components/Toast";
 
 /* ── Settings types ─────────────────────────────────────── */
 type Theme = "dark" | "light";
@@ -166,6 +169,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bookmarksOpen, setBookmarksOpen] = useState(false);
+  const { bookmarks, isBookmarked, toggleBookmark, removeBookmark } = useBookmarks();
 
   useEffect(() => { fetchSources(); }, [fetchSources]);
 
@@ -280,6 +285,27 @@ export default function App() {
         {/* Spacer */}
         <div style={{ flex: 1 }} />
 
+        {/* Bookmarks button */}
+        <button
+          onClick={() => setBookmarksOpen(true)}
+          style={{
+            display: "flex", alignItems: "center", gap: "0.6rem",
+            padding: "0.6rem 0.75rem", borderRadius: 10,
+            background: "var(--bg-card)", border: "1px solid var(--border)",
+            color: "var(--text-secondary)", cursor: "pointer",
+            fontSize: "0.84rem", fontWeight: 500,
+            transition: "background 0.15s, color 0.15s",
+            marginBottom: "0.35rem",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-card-hover)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg-card)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+          </svg>
+          收藏 {bookmarks.length > 0 && <span style={{ background: "var(--accent)", color: "#fff", borderRadius: 10, padding: "0 0.4rem", fontSize: "0.68rem", fontWeight: 600, minWidth: 18, textAlign: "center", lineHeight: "18px" }}>{bookmarks.length}</span>}
+        </button>
+
         {/* Settings button */}
         <button
           onClick={() => setSettingsOpen(true)}
@@ -302,6 +328,24 @@ export default function App() {
           设置
         </button>
       </aside>
+
+      {/* ── Bookmarks panel ──────────────────────────── */}
+      {bookmarksOpen && (
+        <>
+          <div
+            className="settings-overlay"
+            onClick={() => setBookmarksOpen(false)}
+          />
+          <div className="settings-panel">
+            <BookmarksPanel
+              bookmarks={bookmarks}
+              onRemove={removeBookmark}
+              onSearch={(q) => handleSearch(q)}
+              onClose={() => setBookmarksOpen(false)}
+            />
+          </div>
+        </>
+      )}
 
       {/* ── Settings panel ────────────────────────────── */}
       {settingsOpen && (
@@ -364,7 +408,13 @@ export default function App() {
         {/* Results */}
         {results && (
           <div style={{ flex: 1, overflowY: "auto", padding: "0.5rem 1rem 2rem" }}>
-            <ResultPanel results={results.results} query={query} columns={settings.columns} />
+            <ResultPanel
+              results={results.results}
+              query={query}
+              columns={settings.columns}
+              isBookmarked={isBookmarked}
+              onToggleBookmark={toggleBookmark}
+            />
           </div>
         )}
 
@@ -384,6 +434,7 @@ export default function App() {
     </div>
     {/* close mobile wrapper */}
     </div>
+    <ToastContainer />
     </>
   );
 }

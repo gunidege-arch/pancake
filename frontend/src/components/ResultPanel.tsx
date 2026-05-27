@@ -3,11 +3,14 @@ import type { SearchResultItem, NormalizedCard } from "../types";
 import { normalizeResult } from "../types";
 import VideoCard from "./VideoCard";
 import VideoModal from "./VideoModal";
+import { showToast } from "./Toast";
 
 interface Props {
   results: SearchResultItem[];
   query: string;
   columns: string;
+  isBookmarked: (url: string) => boolean;
+  onToggleBookmark: (item: { title: string; url: string; thumbnail?: string | null; sourceName?: string }) => boolean;
 }
 
 interface ModalData {
@@ -17,7 +20,7 @@ interface ModalData {
   sourceName: string;
 }
 
-export default function ResultPanel({ results, query, columns }: Props) {
+export default function ResultPanel({ results, query, columns, isBookmarked, onToggleBookmark }: Props) {
   const [modal, setModal] = useState<ModalData | null>(null);
   const openModal = useCallback((data: ModalData) => setModal(data), []);
   const closeModal = useCallback(() => setModal(null), []);
@@ -66,11 +69,27 @@ export default function ResultPanel({ results, query, columns }: Props) {
             }
           };
 
+          const url = card.originalUrl ?? card.videoUrl ?? "";
+          const bookmarked = url ? isBookmarked(url) : false;
+
+          const handleToggleBookmark = () => {
+            if (!url) return;
+            const added = onToggleBookmark({
+              title: card.title,
+              url,
+              thumbnail: card.thumbnail,
+              sourceName: card.sourceName,
+            });
+            showToast(added ? "已收藏 ♡" : "已取消收藏");
+          };
+
           return (
             <VideoCard
               key={`card-${idx}`}
               card={card}
               onOpen={handleOpen}
+              bookmarked={bookmarked}
+              onToggleBookmark={handleToggleBookmark}
             />
           );
         })}
