@@ -1,226 +1,229 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
+import * as THREE from "three";
 
-/* ── 3-layer depth system (near / mid / far) ──────────── */
-interface Dot {
-  x: number; y: number; z: number; /* 0=far ... 1=near */
-  vx: number; vy: number;
-  size: number; opacity: number;
-  hue: number;
-}
-
-function spawnDot(w: number, h: number): Dot {
-  const z = Math.random(); /* depth: 0 (far) to 1 (near) */
-  return {
-    x: Math.random() * w,
-    y: Math.random() * h,
-    z,
-    vx: (Math.random() - 0.5) * 0.3,
-    vy: (Math.random() - 0.5) * 0.3 - 0.15, /* slight upward drift */
-    size: 0.6 + z * 2.4,   /* near dots are bigger */
-    opacity: 0.1 + z * 0.5, /* near dots are brighter */
-    hue: 210 + Math.random() * 60, /* blue-teal range */
-  };
-}
-
-/* ── "Environments" — color palettes cycled by spacebar ── */
+/* ── Color environments ────────────────────────────────── */
 const ENVIRONMENTS = [
-  { name: "深海", bg: "#020812", hue: 215, accent: "#4a8ec9" },
-  { name: "极光", bg: "#010a08", hue: 170, accent: "#4ec9a4" },
-  { name: "暮光", bg: "#0a0408", hue: 330, accent: "#c94a7a" },
-  { name: "紫夜", bg: "#060410", hue: 260, accent: "#8b5cf6" },
+  { name: "深海", bg: "#020812", primary: "#4a8ec9", accent: "#7ab8f0" },
+  { name: "极光", bg: "#010a08", primary: "#4ec9a4", accent: "#7af0d0" },
+  { name: "暮光", bg: "#0a0408", primary: "#c94a7a", accent: "#f07aaa" },
+  { name: "紫夜", bg: "#060410", primary: "#8b5cf6", accent: "#b794f4" },
 ];
 
-/* ── Grid/geometric lines ──────────────────────────────── */
-function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const gradient = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.85);
-  gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(1, "rgba(0,0,0,0.65)");
+const PARTICLE_COUNT = 1800;
+const DEPTH_LAYERS = 4;
+
+/* ── Generate soft circle texture for points ───────────── */
+function createPointTexture(): THREE.Texture {
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.08, "rgba(255,255,255,0.9)");
+  gradient.addColorStop(0.25, "rgba(255,255,255,0.5)");
+  gradient.addColorStop(0.5, "rgba(255,255,255,0.1)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
 }
 
-function drawScanlines(ctx: CanvasRenderingContext2D, w: number, h: number, frame: number) {
-  ctx.fillStyle = "rgba(0,0,0,0.015)";
-  for (let y = 0; y < h; y += 3) {
-    ctx.fillRect(0, y, w, 1);
-  }
-}
-
-function drawCenterGlow(ctx: CanvasRenderingContext2D, w: number, h: number, hue: number, t: number) {
-  const cx = w / 2;
-  const cy = h / 2;
-  const pulse = 1 + Math.sin(t * 0.001) * 0.15;
-  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, h * 0.45 * pulse);
-  const hsl = (h: number) => `hsla(${hue}, 60%, 55%, ${h})`;
-  glow.addColorStop(0, hsl(0.06));
-  glow.addColorStop(0.3, hsl(0.03));
-  glow.addColorStop(0.6, hsl(0.01));
-  glow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, w, h);
-}
-
-/* ── Dot connection lines (only for near-layer dots) ───── */
-function drawConnections(ctx: CanvasRenderingContext2D, dots: Dot[], threshold: number, hue: number) {
-  for (let i = 0; i < dots.length; i++) {
-    for (let j = i + 1; j < dots.length; j++) {
-      const a = dots[i];
-      const b = dots[j];
-      if (a.z < 0.5 || b.z < 0.5) continue; /* only near dots connect */
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < threshold) {
-        const alpha = (1 - dist / threshold) * 0.12 * a.z * b.z;
-        ctx.strokeStyle = `hsla(${hue}, 60%, 65%, ${alpha})`;
-        ctx.lineWidth = 0.4;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-      }
-    }
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════
-   COMPONENT
-   ═══════════════════════════════════════════════════════════ */
 interface Props {
   onDismissed: () => void;
 }
-
-const DOT_COUNT = 70;
 
 export default function SplashScreen({ onDismissed }: Props) {
   const [exiting, setExiting] = useState(false);
   const [removed, setRemoved] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const envRef = useRef(0);
-  const cursorRef = useRef({ x: -999, y: -999, active: false });
-  const dotsRef = useRef<Dot[]>([]);
-  const rafRef = useRef(0);
-  const frameRef = useRef(0);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef({
+    camera: null as THREE.PerspectiveCamera | null,
+    renderer: null as THREE.WebGLRenderer | null,
+    points: [] as THREE.Points[],
+    scene: null as THREE.Scene | null,
+    targetX: 0, targetY: 0,
+    env: 0,
+    frame: 0,
+    exitProgress: 0,
+  });
 
-  /* ── Init dots ── */
+  /* ── Three.js setup ── */
   useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
     const w = window.innerWidth;
     const h = window.innerHeight;
-    dotsRef.current = Array.from({ length: DOT_COUNT }, () => spawnDot(w, h));
-  }, []);
+    const anim = animRef.current;
 
-  /* ── Canvas loop ── */
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    let w = window.innerWidth;
-    let h = window.innerHeight;
-    canvas.width = w;
-    canvas.height = h;
+    /* Scene */
+    const scene = new THREE.Scene();
+    anim.scene = scene;
 
+    /* Camera */
+    const camera = new THREE.PerspectiveCamera(60, w / h, 1, 2000);
+    camera.position.z = 500;
+    anim.camera = camera;
+
+    /* Renderer */
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mount.appendChild(renderer.domElement);
+    anim.renderer = renderer;
+
+    /* Point texture */
+    const texture = createPointTexture();
+
+    /* ── Create particle layers (different Z depths) ── */
+    const layers = DEPTH_LAYERS;
+    const pointsPerLayer = Math.floor(PARTICLE_COUNT / layers);
+    const points: THREE.Points[] = [];
+
+    for (let l = 0; l < layers; l++) {
+      const zDepth = -200 + l * 160; /* spread along Z: -200 to +280 */
+      const spread = 350 + l * 80;   /* further layers spread wider */
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(pointsPerLayer * 3);
+      const colors = new Float32Array(pointsPerLayer * 3);
+      const sizes = new Float32Array(pointsPerLayer);
+
+      for (let i = 0; i < pointsPerLayer; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * spread * 2;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * spread * 1.4;
+        positions[i * 3 + 2] = zDepth + (Math.random() - 0.5) * 100;
+        sizes[i] = 2 + Math.random() * 5 * (1 - l * 0.2);
+        /* hue varies slightly per layer */
+        const hue = 0.55 + l * 0.04 + Math.random() * 0.06;
+        const col = new THREE.Color().setHSL(hue, 0.6, 0.5 + l * 0.12);
+        colors[i * 3] = col.r;
+        colors[i * 3 + 1] = col.g;
+        colors[i * 3 + 2] = col.b;
+      }
+
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      geo.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
+
+      const mat = new THREE.PointsMaterial({
+        size: 6,
+        map: texture,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.75,
+      });
+
+      const pts = new THREE.Points(geo, mat);
+      scene.add(pts);
+      points.push(pts);
+    }
+    anim.points = points;
+
+    /* ── Ambient floating particles (no depth, scattered all around) ── */
+    const ambientCount = 200;
+    const ambGeo = new THREE.BufferGeometry();
+    const ambPos = new Float32Array(ambientCount * 3);
+    for (let i = 0; i < ambientCount; i++) {
+      ambPos[i * 3] = (Math.random() - 0.5) * 1200;
+      ambPos[i * 3 + 1] = (Math.random() - 0.5) * 800;
+      ambPos[i * 3 + 2] = -300 + Math.random() * 600;
+    }
+    ambGeo.setAttribute("position", new THREE.BufferAttribute(ambPos, 3));
+    const ambMat = new THREE.PointsMaterial({
+      size: 2.5,
+      map: texture,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      color: new THREE.Color("#ffffff"),
+      transparent: true,
+      opacity: 0.3,
+    });
+    const ambient = new THREE.Points(ambGeo, ambMat);
+    scene.add(ambient);
+    points.push(ambient);
+
+    /* ── Resize ── */
     const onResize = () => {
-      w = window.innerWidth;
-      h = window.innerHeight;
-      canvas.width = w;
-      canvas.height = h;
+      const nw = window.innerWidth;
+      const nh = window.innerHeight;
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      renderer.setSize(nw, nh);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     };
     window.addEventListener("resize", onResize);
 
+    /* ── Render loop ── */
+    let raf = 0;
     const loop = () => {
-      const f = frameRef.current++;
-      const t = performance.now();
-      const env = ENVIRONMENTS[envRef.current];
-      const { x: cx, y: cy, active: cursorActive } = cursorRef.current;
+      anim.frame++;
+      const t = anim.frame * 0.01;
 
-      /* ── backdrop ── */
-      ctx.fillStyle = env.bg;
-      ctx.fillRect(0, 0, w, h);
+      /* camera sway */
+      camera.position.x += (anim.targetX * 60 - camera.position.x) * 0.03;
+      camera.position.y += (anim.targetY * 40 - camera.position.y) * 0.03;
+      camera.lookAt(0, 0, 0);
 
-      /* ── center glow ── */
-      drawCenterGlow(ctx, w, h, env.hue, t);
-
-      const dots = dotsRef.current;
-
-      /* ── maintain count ── */
-      while (dots.length < DOT_COUNT) dots.push(spawnDot(w, h));
-      if (dots.length > DOT_COUNT + 10) dots.splice(DOT_COUNT);
-
-      /* ── update + draw dots ── */
-      for (let i = dots.length - 1; i >= 0; i--) {
-        const d = dots[i];
-        const depthFactor = 0.3 + d.z * 0.7;
-
-        /* cursor gravity (stronger on near dots) */
-        if (cursorActive && cx > 0 && cy > 0) {
-          const dx = cx - d.x;
-          const dy = cy - d.y;
-          const dist = Math.sqrt(dx * dx + dy * dy) + 1;
-          if (dist < 250) {
-            const force = depthFactor * 0.18 / (dist * 0.008);
-            d.vx += (dx / dist) * force;
-            d.vy += (dy / dist) * force;
-          }
+      /* rotate each layer at different speeds (parallax) */
+      points.forEach((pts, i) => {
+        if (i < layers) {
+          const speed = 0.08 + i * 0.025;
+          pts.rotation.y += speed * 0.008;
+          pts.rotation.x += speed * 0.004;
+        } else {
+          pts.rotation.y += 0.02;
         }
+      });
 
-        /* drift */
-        d.vx += (Math.random() - 0.5) * 0.03;
-        d.vy += (Math.random() - 0.5) * 0.02 - 0.015;
-        d.vx *= 0.994;
-        d.vy *= 0.994;
-
-        /* move */
-        d.x += d.vx * depthFactor;
-        d.y += d.vy * depthFactor;
-
-        /* wrap */
-        if (d.x < -30) d.x = w + 30;
-        if (d.x > w + 30) d.x = -30;
-        if (d.y < -30) { d.y = h + 30; d.x = Math.random() * w; }
-        if (d.y > h + 30) { d.y = -30; d.x = Math.random() * w; }
-
-        /* draw */
-        const alpha = d.opacity * (0.5 + depthFactor * 0.5);
-        ctx.fillStyle = `hsla(${env.hue + d.z * 40}, 50%, ${45 + d.z * 40}%, ${alpha})`;
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
-        ctx.fill();
+      /* exit animation */
+      if (exiting) {
+        anim.exitProgress += 0.008;
+        const ep = Math.min(anim.exitProgress, 1);
+        camera.position.z = 500 + ep * 800; /* zoom in */
+        renderer.domElement.style.opacity = String(1 - ep);
+        points.forEach((pts) => {
+          const mat = pts.material as THREE.PointsMaterial;
+          if (mat.opacity !== undefined) mat.opacity = 0.75 * (1 - ep);
+        });
+        if (ep >= 1) {
+          cancelAnimationFrame(raf);
+          setRemoved(true);
+          onDismissed();
+          return;
+        }
       }
 
-      /* ── connections ── */
-      drawConnections(ctx, dots, 100, env.hue);
-
-      /* ── scanlines ── */
-      drawScanlines(ctx, w, h, f);
-
-      /* ── vignette ── */
-      drawVignette(ctx, w, h);
-
-      /* ── cursor glow ── */
-      if (cursorActive && cx > 0 && cy > 0) {
-        const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 70);
-        cg.addColorStop(0, `hsla(${env.hue}, 70%, 65%, 0.1)`);
-        cg.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = cg;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 70, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      rafRef.current = requestAnimationFrame(loop);
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(loop);
     };
+    raf = requestAnimationFrame(loop);
 
-    rafRef.current = requestAnimationFrame(loop);
-    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener("resize", onResize); };
-  }, []);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+      renderer.dispose();
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
+    };
+  }, [exiting, onDismissed]);
 
   /* ── Spacebar → cycle environment ── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space") {
         e.preventDefault();
-        envRef.current = (envRef.current + 1) % ENVIRONMENTS.length;
+        animRef.current.env = (animRef.current.env + 1) % ENVIRONMENTS.length;
+        const env = ENVIRONMENTS[animRef.current.env];
+        animRef.current.points.forEach((pts) => {
+          if (Array.isArray(pts.material)) return;
+          const hsl = { h: 0, s: 0, l: 0 };
+          (pts.material as THREE.PointsMaterial).color!.getHSL(hsl);
+          const newCol = new THREE.Color(env.primary);
+          (pts.material as THREE.PointsMaterial).color!.set(newCol);
+        });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -229,23 +232,17 @@ export default function SplashScreen({ onDismissed }: Props) {
 
   /* ── Pointer ── */
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    cursorRef.current = { x: e.clientX, y: e.clientY, active: true };
+    animRef.current.targetX = (e.clientX / window.innerWidth - 0.5) * 2;
+    animRef.current.targetY = -(e.clientY / window.innerHeight - 0.5) * 2;
   }, []);
   const handlePointerLeave = useCallback(() => {
-    cursorRef.current = { x: -999, y: -999, active: false };
+    animRef.current.targetX = 0;
+    animRef.current.targetY = 0;
   }, []);
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    /* burst */
-    for (let i = 0; i < 15; i++) {
-      const d = spawnDot(window.innerWidth, window.innerHeight);
-      d.x = e.clientX + (Math.random() - 0.5) * 40;
-      d.y = e.clientY + (Math.random() - 0.5) * 40;
-      d.z = 0.6 + Math.random() * 0.4;
-      d.vx = (Math.random() - 0.5) * 4;
-      d.vy = (Math.random() - 0.5) * 4;
-      d.opacity = 0.8;
-      dotsRef.current.push(d);
-    }
+    /* burst impulse — briefly shake the camera target */
+    animRef.current.targetX += (e.clientX / window.innerWidth - 0.5) * 3;
+    animRef.current.targetY += -(e.clientY / window.innerHeight - 0.5) * 3;
   }, []);
 
   /* ── Dismiss ── */
@@ -253,38 +250,43 @@ export default function SplashScreen({ onDismissed }: Props) {
     if (exiting) return;
     setExiting(true);
   }, [exiting]);
-  const handleAnimationEnd = useCallback(
-    (e: React.AnimationEvent) => {
-      if (e.target === overlayRef.current && exiting) {
-        setRemoved(true);
-        onDismissed();
-      }
-    },
-    [exiting, onDismissed],
-  );
 
   if (removed) return null;
 
-  const env = ENVIRONMENTS[envRef.current];
+  const env = ENVIRONMENTS[animRef.current.env];
 
   return (
     <div
       ref={overlayRef}
-      className={`splash-overlay ${exiting ? "splash-exit" : ""}`}
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        overflow: "hidden", cursor: exiting ? "default" : "pointer",
+        userSelect: "none", WebkitTapHighlightColor: "transparent",
+        touchAction: "manipulation",
+        background: env.bg,
+        transition: "background 1s ease",
+      }}
       onClick={handleClick}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
       onPointerDown={handlePointerDown}
-      onAnimationEnd={handleAnimationEnd}
     >
-      {/* Canvas layer */}
-      <canvas
-        ref={canvasRef}
-        style={{ position: "absolute", inset: 0, zIndex: 1, touchAction: "none" }}
+      {/* Three.js mount */}
+      <div
+        ref={mountRef}
+        style={{ position: "absolute", inset: 0, zIndex: 1 }}
       />
 
-      {/* Glass card — centered */}
-      <div className="splash-glass" style={{ zIndex: 2 }}>
+      {/* Glass card */}
+      <div
+        className="splash-glass"
+        style={{
+          zIndex: 2,
+          opacity: exiting ? Math.max(0, 1 - (animRef.current.exitProgress || 0) * 2) : 1,
+          transition: "opacity 0.3s",
+        }}
+      >
         <div className="splash-shimmer-line" />
         <h1 className="splash-title">
           <span className="splash-title-text">别问了自己搜</span>
@@ -294,10 +296,10 @@ export default function SplashScreen({ onDismissed }: Props) {
         </div>
         <p className="splash-hint">轻触任意位置进入</p>
         <p style={{
-          margin: 0, fontSize: "0.6rem", color: "rgba(255,255,255,.15)",
+          margin: 0, fontSize: "0.6rem", color: "rgba(255,255,255,.18)",
           letterSpacing: "0.1em", fontFamily: "Inter, sans-serif",
         }}>
-          按空格键切换场景 · {env.name}
+          空格切换场景 · {env.name}
         </p>
       </div>
     </div>
