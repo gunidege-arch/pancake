@@ -8,13 +8,15 @@ import SplashScreen from "./components/SplashScreen";
 /* ── Settings types ─────────────────────────────────────── */
 type Theme = "dark" | "light";
 type Columns = "2" | "3" | "4";
+type ViewMode = "auto" | "mobile";
 
 interface Settings {
   theme: Theme;
   columns: Columns;
+  viewMode: ViewMode;
 }
 
-const DEFAULT_SETTINGS: Settings = { theme: "dark", columns: "2" };
+const DEFAULT_SETTINGS: Settings = { theme: "dark", columns: "2", viewMode: "auto" };
 
 function loadSettings(): Settings {
   try {
@@ -109,6 +111,17 @@ function SettingsPanel({
                 ))}
               </select>
             </div>
+
+            <div className="settings-option">
+              <div>
+                <div className="settings-option-label">手机视图</div>
+                <div className="settings-option-desc">固定为手机宽度，仿真 App 体验</div>
+              </div>
+              <Toggle
+                checked={settings.viewMode === "mobile"}
+                onChange={(v) => onUpdate({ ...settings, viewMode: v ? "mobile" : "auto" })}
+              />
+            </div>
           </div>
 
           {/* 关于 */}
@@ -156,6 +169,13 @@ export default function App() {
 
   useEffect(() => { fetchSources(); }, [fetchSources]);
 
+  /* register service worker for PWA */
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   /* persist settings */
   useEffect(() => { saveSettings(settings); }, [settings]);
 
@@ -170,7 +190,24 @@ export default function App() {
   return (
     <>
       <SplashScreen />
-      <div style={{ display: "flex", height: "100dvh", overflow: "hidden" }}>
+      {/* ── Mobile view wrapper ──────────────────────────── */}
+      <div
+        style={
+          settings.viewMode === "mobile"
+            ? {
+                maxWidth: 430,
+                margin: "0 auto",
+                height: "100dvh",
+                overflow: "hidden",
+                borderLeft: "1px solid var(--border)",
+                borderRight: "1px solid var(--border)",
+                boxShadow: "0 0 60px rgba(0,0,0,.5)",
+                position: "relative",
+              }
+            : { height: "100dvh", overflow: "hidden" }
+        }
+      >
+      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
       {/* ── Mobile hamburger ─────────────────────────── */}
       <button
         style={{
@@ -345,6 +382,8 @@ export default function App() {
           </div>
         )}
       </main>
+    </div>
+    {/* close mobile wrapper */}
     </div>
     </>
   );
