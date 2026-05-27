@@ -67,10 +67,15 @@ export default function SplashScreen({ onDismissed }: Props) {
     camera.position.z = 500;
     anim.camera = camera;
 
-    /* Renderer */
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    /* Renderer — high-perf WebGL, cap pixel ratio on mobile */
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !isMobile,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
     renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2.5));
     mount.appendChild(renderer.domElement);
     anim.renderer = renderer;
 
@@ -81,6 +86,8 @@ export default function SplashScreen({ onDismissed }: Props) {
     const layers = DEPTH_LAYERS;
     const pointsPerLayer = Math.floor(PARTICLE_COUNT / layers);
     const points: THREE.Points[] = [];
+    const allGeos: THREE.BufferGeometry[] = [];
+    const allMats: THREE.PointsMaterial[] = [];
 
     for (let l = 0; l < layers; l++) {
       const zDepth = -200 + l * 160; /* spread along Z: -200 to +280 */
@@ -106,6 +113,7 @@ export default function SplashScreen({ onDismissed }: Props) {
       geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
       geo.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
+      allGeos.push(geo);
 
       const mat = new THREE.PointsMaterial({
         size: 6,
@@ -116,6 +124,7 @@ export default function SplashScreen({ onDismissed }: Props) {
         transparent: true,
         opacity: 0.75,
       });
+      allMats.push(mat);
 
       const pts = new THREE.Points(geo, mat);
       scene.add(pts);
@@ -133,6 +142,7 @@ export default function SplashScreen({ onDismissed }: Props) {
       ambPos[i * 3 + 2] = -300 + Math.random() * 600;
     }
     ambGeo.setAttribute("position", new THREE.BufferAttribute(ambPos, 3));
+    allGeos.push(ambGeo);
     const ambMat = new THREE.PointsMaterial({
       size: 2.5,
       map: texture,
@@ -142,6 +152,7 @@ export default function SplashScreen({ onDismissed }: Props) {
       transparent: true,
       opacity: 0.3,
     });
+    allMats.push(ambMat);
     const ambient = new THREE.Points(ambGeo, ambMat);
     scene.add(ambient);
     points.push(ambient);
@@ -205,6 +216,10 @@ export default function SplashScreen({ onDismissed }: Props) {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
+      /* full GPU disposal */
+      allGeos.forEach((g) => g.dispose());
+      allMats.forEach((m) => { m.map?.dispose(); m.dispose(); });
+      texture.dispose();
       renderer.dispose();
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };

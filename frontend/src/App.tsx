@@ -1,12 +1,13 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, lazy, Suspense } from "react";
 import { useSearch, useSources } from "./hooks/useSearch";
 import { useBookmarks } from "./hooks/useBookmarks";
 import SearchBar from "./components/SearchBar";
 import SourceManager from "./components/SourceManager";
 import ResultPanel from "./components/ResultPanel";
-import SplashScreen from "./components/SplashScreen";
 import BookmarksPanel from "./components/BookmarksPanel";
 import ToastContainer from "./components/Toast";
+
+const SplashScreen = lazy(() => import("./components/SplashScreen"));
 
 import NavContent from "./components/NavContent";
 import BottomSheet from "./components/BottomSheet";
@@ -228,7 +229,9 @@ export default function App() {
 
   return (
     <>
-      <SplashScreen onDismissed={() => setSplashDone(true)} />
+      <Suspense fallback={null}>
+        <SplashScreen onDismissed={() => setSplashDone(true)} />
+      </Suspense>
       {/* ── Mobile view wrapper ──────────────────────────── */}
       <div
         style={
