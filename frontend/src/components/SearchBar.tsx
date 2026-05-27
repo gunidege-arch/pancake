@@ -3,9 +3,10 @@ import { useState, type FormEvent } from "react";
 interface Props {
   onSearch: (query: string) => void;
   loading: boolean;
+  autoFocus?: boolean;
 }
 
-export default function SearchBar({ onSearch, loading }: Props) {
+export default function SearchBar({ onSearch, loading, autoFocus }: Props) {
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
 
@@ -65,7 +66,7 @@ export default function SearchBar({ onSearch, loading }: Props) {
             fontSize: "0.875rem",
             transition: "border-color 0.2s, box-shadow 0.2s",
           }}
-          autoFocus
+          autoFocus={autoFocus ?? false}
         />
       </div>
 

@@ -1,76 +1,103 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-export default function SplashScreen() {
+const PARTICLES = Array.from({ length: 30 }, (_, i) => ({
+  id: i,
+  x: Math.random() * 100,
+  delay: Math.random() * 6,
+  size: 1 + Math.random() * 2.5,
+  duration: 4 + Math.random() * 6,
+}));
+
+interface Props {
+  onDismissed: () => void;
+}
+
+export default function SplashScreen({ onDismissed }: Props) {
   const [exiting, setExiting] = useState(false);
   const [removed, setRemoved] = useState(false);
+  const [touchY, setTouchY] = useState(0);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const bgRef = useRef<HTMLDivElement>(null);
 
-  /* ── Mouse-driven subtle parallax on the gradient orbs ── */
-  useEffect(() => {
-    const el = bgRef.current;
-    if (!el) return;
-    const onMove = (e: MouseEvent) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 30;
-      const y = (e.clientY / window.innerHeight - 0.5) * 30;
-      el.style.setProperty("--mx", `${x}px`);
-      el.style.setProperty("--my", `${y}px`);
-    };
-    window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
-  }, []);
-
-  /* ── Click handler ── */
+  /* ── Click / touch to dismiss ── */
   const handleClick = useCallback(() => {
     if (exiting) return;
     setExiting(true);
   }, [exiting]);
 
-  /* ── Remove DOM after animation ends ── */
+  /* ── Touch move for subtle parallax on mobile ── */
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    setTouchY(e.touches[0]?.clientY ?? 0);
+  }, []);
+
+  /* ── Remove DOM after animation, notify parent ── */
   const handleAnimationEnd = useCallback(
     (e: React.AnimationEvent) => {
       if (e.target === overlayRef.current && exiting) {
         setRemoved(true);
+        onDismissed();
       }
     },
-    [exiting],
+    [exiting, onDismissed],
   );
 
   if (removed) return null;
+
+  const parallax = touchY ? (touchY / window.innerHeight - 0.5) * 16 : 0;
 
   return (
     <div
       ref={overlayRef}
       className={`splash-overlay ${exiting ? "splash-exit" : ""}`}
       onClick={handleClick}
+      onTouchMove={handleTouchMove}
       onAnimationEnd={handleAnimationEnd}
-      style={{ cursor: exiting ? "default" : "pointer" }}
     >
-      {/* ── Animated gradient orbs (background) ── */}
-      <div ref={bgRef} className="splash-bg">
-        <div className="splash-orb splash-orb-a" />
-        <div className="splash-orb splash-orb-b" />
-        <div className="splash-orb splash-orb-c" />
+      {/* ── Deep space background ── */}
+      <div className="splash-bg" />
+
+      {/* ── Floating particles ── */}
+      {PARTICLES.map((p) => (
+        <div
+          key={p.id}
+          className="splash-particle"
+          style={{
+            left: `${p.x}%`,
+            width: p.size,
+            height: p.size,
+            animationDelay: `${p.delay}s`,
+            animationDuration: `${p.duration}s`,
+          }}
+        />
+      ))}
+
+      {/* ── Concentric rings ── */}
+      <div className="splash-rings" style={{ transform: `translateY(${parallax * 0.3}px)` }}>
+        <div className="splash-ring splash-ring-1" />
+        <div className="splash-ring splash-ring-2" />
+        <div className="splash-ring splash-ring-3" />
       </div>
 
       {/* ── Glass card ── */}
-      <div className="splash-glass">
-        {/* subtle top shimmer line */}
+      <div
+        className="splash-glass"
+        style={{ transform: `translateY(${parallax * 0.5}px)` }}
+      >
         <div className="splash-shimmer-line" />
 
-        {/* Main title */}
         <h1 className="splash-title">
           <span className="splash-title-text">别问了自己搜</span>
         </h1>
 
-        {/* Decorative rule */}
+        {/* Decorative divider */}
         <div className="splash-rule">
           <span className="splash-rule-diamond" />
         </div>
 
-        {/* Hint */}
-        <p className="splash-hint">// 点击开启 //</p>
+        <p className="splash-hint">轻触任意位置进入</p>
       </div>
+
+      {/* ── Bottom glow bar ── */}
+      <div className="splash-bottom-glow" />
     </div>
   );
 }

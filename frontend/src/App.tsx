@@ -201,6 +201,7 @@ export default function App() {
   const { sources, fetchSources, addSource, deleteSource } = useSources();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [splashDone, setSplashDone] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
   const { bookmarks, isBookmarked, toggleBookmark, removeBookmark } = useBookmarks();
@@ -227,7 +228,7 @@ export default function App() {
 
   return (
     <>
-      <SplashScreen />
+      <SplashScreen onDismissed={() => setSplashDone(true)} />
       {/* ── Mobile view wrapper ──────────────────────────── */}
       <div
         style={
@@ -365,7 +366,7 @@ export default function App() {
             </svg>
           </button>
           <div style={{ width: "100%", maxWidth: 500 }}>
-            <SearchBar onSearch={handleSearch} loading={loading} />
+            <SearchBar onSearch={handleSearch} loading={loading} autoFocus={splashDone} />
           </div>
         </div>
 
