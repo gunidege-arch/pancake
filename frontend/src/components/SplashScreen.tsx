@@ -1,34 +1,314 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useState, useCallback, Suspense } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import {
+  OrbitControls, Text, Sphere, Stars, Float,
+  PerspectiveCamera,
+} from "@react-three/drei";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import * as THREE from "three";
 
-/* ── Color environments ────────────────────────────────── */
-const ENVIRONMENTS = [
-  { name: "深海", bg: "#020812", primary: "#4a8ec9", accent: "#7ab8f0" },
-  { name: "极光", bg: "#010a08", primary: "#4ec9a4", accent: "#7af0d0" },
-  { name: "暮光", bg: "#0a0408", primary: "#c94a7a", accent: "#f07aaa" },
-  { name: "紫夜", bg: "#060410", primary: "#8b5cf6", accent: "#b794f4" },
-];
+/* ═══════════════════════════════════════════════════════════
+   EARTH TEXTURE
+   ═══════════════════════════════════════════════════════════ */
+const EARTH_MAP = "https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg";
+const EARTH_BUMP = "https://threejs.org/examples/textures/planets/earth_normal_2048.jpg";
+const EARTH_SPEC = "https://threejs.org/examples/textures/planets/earth_specular_2048.jpg";
 
-const PARTICLE_COUNT = 1800;
-const DEPTH_LAYERS = 4;
+/* ═══════════════════════════════════════════════════════════
+   EARTH COMPONENT
+   ═══════════════════════════════════════════════════════════ */
+function Earth() {
+  const earthRef = useRef<THREE.Mesh>(null!);
+  const groupRef = useRef<THREE.Group>(null!);
+  const [textures] = useState(() => {
+    const loader = new THREE.TextureLoader();
+    const map = loader.load(EARTH_MAP);
+    const bumpMap = loader.load(EARTH_BUMP);
+    const specularMap = loader.load(EARTH_SPEC);
+    return { map, bumpMap, specularMap };
+  });
 
-/* ── Generate soft circle texture for points ───────────── */
-function createPointTexture(): THREE.Texture {
-  const size = 64;
-  const canvas = document.createElement("canvas");
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, "rgba(255,255,255,1)");
-  gradient.addColorStop(0.08, "rgba(255,255,255,0.9)");
-  gradient.addColorStop(0.25, "rgba(255,255,255,0.5)");
-  gradient.addColorStop(0.5, "rgba(255,255,255,0.1)");
-  gradient.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-  return new THREE.CanvasTexture(canvas);
+  useFrame((_, delta) => {
+    if (earthRef.current) earthRef.current.rotation.y += delta * 0.12;
+    if (groupRef.current) groupRef.current.rotation.y += delta * 0.02;
+  });
+
+  return (
+    <group ref={groupRef}>
+      {/* Orbit ring */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[3.8, 3.82, 128]} />
+        <meshBasicMaterial color="#4a6c8f" opacity={0.15} transparent side={THREE.DoubleSide} />
+      </mesh>
+      {/* Earth */}
+      <group position={[4, 0, 0]}>
+        <Sphere ref={earthRef} args={[0.8, 64, 64]}>
+          <meshPhongMaterial
+            map={textures.map}
+            bumpMap={textures.bumpMap}
+            bumpScale={0.05}
+            specularMap={textures.specularMap}
+            specular={new THREE.Color("#333")}
+            shininess={10}
+          />
+        </Sphere>
+        {/* Atmosphere glow */}
+        <Sphere args={[0.83, 64, 64]}>
+          <meshBasicMaterial
+            color="#4a9fff"
+            transparent
+            opacity={0.08}
+            side={THREE.BackSide}
+          />
+        </Sphere>
+      </group>
+    </group>
+  );
 }
 
+/* ═══════════════════════════════════════════════════════════
+   SUN (central light)
+   ═══════════════════════════════════════════════════════════ */
+function Sun() {
+  return (
+    <group>
+      <Sphere args={[0.6, 32, 32]}>
+        <meshBasicMaterial color="#ffd4a0" />
+      </Sphere>
+      <Sphere args={[0.72, 32, 32]}>
+        <meshBasicMaterial color="#ffaa44" transparent opacity={0.2} />
+      </Sphere>
+      <pointLight intensity={2.5} color="#ffe8d0" distance={20} decay={1.5} />
+      <ambientLight intensity={0.4} />
+    </group>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GALAXY SPIRAL (visible when zoomed out)
+   ═══════════════════════════════════════════════════════════ */
+function GalaxySpiral() {
+  const pointsRef = useRef<THREE.Points>(null!);
+
+  const [geo, mat] = (() => {
+    const count = 8000;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const arms = 4;
+    const spiralTightness = 3.5;
+
+    for (let i = 0; i < count; i++) {
+      const arm = i % arms;
+      const armAngle = (arm / arms) * Math.PI * 2;
+      const radius = 5 + Math.pow(Math.random(), 1.5) * 35;
+      const spiralAngle = armAngle + radius * 0.22;
+      const scatter = (Math.random() - 0.5) * (1.5 + radius * 0.15);
+
+      positions[i * 3] = Math.cos(spiralAngle) * radius + Math.cos(spiralAngle + 1) * scatter;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * (1.2 + radius * 0.08);
+      positions[i * 3 + 2] = Math.sin(spiralAngle) * radius + Math.sin(spiralAngle + 1) * scatter;
+
+      const t = radius / 40;
+      const hue = 0.58 + t * 0.08;
+      const lightness = 0.3 + t * 0.35;
+      const col = new THREE.Color().setHSL(hue, 0.5, lightness);
+      colors[i * 3] = col.r;
+      colors[i * 3 + 1] = col.g;
+      colors[i * 3 + 2] = col.b;
+    }
+
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    const m = new THREE.PointsMaterial({
+      size: 0.12,
+      vertexColors: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0.7,
+    });
+    return [g, m];
+  })();
+
+  useFrame((_, delta) => {
+    if (pointsRef.current) pointsRef.current.rotation.y += delta * 0.015;
+  });
+
+  return <primitive object={new THREE.Points(geo, mat)} ref={pointsRef} />;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   COSMIC TEXT (3D, naturally occluded by planets)
+   ═══════════════════════════════════════════════════════════ */
+function CosmicTitle() {
+  const ref = useRef<THREE.Group>(null!);
+
+  useFrame(({ clock }) => {
+    ref.current.position.y = Math.sin(clock.elapsedTime * 0.3) * 0.15;
+  });
+
+  return (
+    <Float speed={0.4} rotationIntensity={0} floatIntensity={0.3}>
+      <group ref={ref} position={[0, 0.4, 0]}>
+        <Text
+          fontSize={0.55}
+          letterSpacing={0.08}
+          color="#e8e0f0"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.015}
+          outlineColor="#000000"
+          outlineBlur={0.04}
+        >
+          别问了自己搜
+          <meshStandardMaterial
+            color="#e8e0f0"
+            emissive="#443366"
+            emissiveIntensity={0.3}
+            metalness={0.4}
+            roughness={0.6}
+          />
+        </Text>
+        {/* Hint text below */}
+        <Text
+          position={[0, -0.5, 0]}
+          fontSize={0.1}
+          letterSpacing={0.15}
+          color="#8888aa"
+          anchorX="center"
+          anchorY="middle"
+          fillOpacity={0.5}
+        >
+          轻触任意位置进入
+        </Text>
+      </group>
+    </Float>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCENE CONTENT
+   ═══════════════════════════════════════════════════════════ */
+function Scene({ exiting }: { exiting: boolean }) {
+  const controlsRef = useRef<any>(null);
+  const camRef = useRef<THREE.PerspectiveCamera>(null!);
+
+  useFrame(() => {
+    if (exiting && camRef.current) {
+      camRef.current.zoom -= 0.003;
+      camRef.current.updateProjectionMatrix();
+    }
+  });
+
+  return (
+    <>
+      {/* Post-processing */}
+      <EffectComposer>
+        <Bloom luminanceThreshold={0.2} intensity={0.6} radius={0.8} mipmapBlur />
+        <Vignette darkness={0.45} offset={0.1} />
+      </EffectComposer>
+
+      {/* Camera */}
+      <PerspectiveCamera
+        ref={camRef}
+        makeDefault
+        position={[0, 1.2, 7]}
+        fov={50}
+        near={0.1}
+        far={200}
+      />
+
+      {/* Controls — horizontal orbit + zoom */}
+      <OrbitControls
+        ref={controlsRef}
+        enablePan={false}
+        enableZoom={true}
+        enableRotate={true}
+        minPolarAngle={Math.PI / 3}
+        maxPolarAngle={Math.PI / 1.8}
+        minDistance={3}
+        maxDistance={50}
+        autoRotate={!exiting}
+        autoRotateSpeed={0.15}
+        dampingFactor={0.08}
+        zoomSpeed={1.2}
+        rotateSpeed={0.3}
+      />
+
+      {/* Lighting */}
+      <ambientLight intensity={0.15} color="#1a1a3a" />
+
+      {/* Galaxy (far background) */}
+      <GalaxySpiral />
+
+      {/* Deep stars */}
+      <Stars radius={80} depth={60} count={3000} factor={5} saturation={0.3} fade speed={0.3} />
+
+      {/* Solar system */}
+      <Sun />
+      <Earth />
+
+      {/* Mars-like small planet (further out) */}
+      <group rotation={[0, Math.PI * 0.3, 0]}>
+        <mesh position={[8, -0.3, 1]}>
+          <sphereGeometry args={[0.3, 32, 32]} />
+          <meshStandardMaterial color="#c1440e" roughness={0.8} metalness={0.1} />
+        </mesh>
+      </group>
+
+      {/* Belt of asteroids */}
+      <group rotation={[0.1, 0, 0]}>
+        {Array.from({ length: 200 }, (_, i) => {
+          const angle = (i / 200) * Math.PI * 2;
+          const radius = 5.5 + Math.random() * 1.2;
+          const y = (Math.random() - 0.5) * 0.3;
+          return (
+            <mesh
+              key={i}
+              position={[Math.cos(angle) * radius, y, Math.sin(angle) * radius]}
+            >
+              <sphereGeometry args={[0.02 + Math.random() * 0.04, 4, 4]} />
+              <meshStandardMaterial color="#999" roughness={1} />
+            </mesh>
+          );
+        })}
+      </group>
+
+      {/* 3D text — naturally occluded */}
+      <CosmicTitle />
+
+      {/* Fog for depth */}
+      <fog attach="fog" args={["#020812", 15, 60]} />
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FALLBACK (before R3F loads)
+   ═══════════════════════════════════════════════════════════ */
+function Fallback() {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      background: "#020812",
+    }}>
+      <div style={{
+        fontFamily: "'Cinzel Decorative', serif",
+        fontSize: "clamp(1.2rem, 4vw, 1.8rem)",
+        color: "rgba(200,180,220,.6)",
+        letterSpacing: "0.1em",
+      }}>
+        别问了自己搜
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════ */
 interface Props {
   onDismissed: () => void;
 }
@@ -36,287 +316,69 @@ interface Props {
 export default function SplashScreen({ onDismissed }: Props) {
   const [exiting, setExiting] = useState(false);
   const [removed, setRemoved] = useState(false);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const mountRef = useRef<HTMLDivElement>(null);
-  const animRef = useRef({
-    camera: null as THREE.PerspectiveCamera | null,
-    renderer: null as THREE.WebGLRenderer | null,
-    points: [] as THREE.Points[],
-    scene: null as THREE.Scene | null,
-    targetX: 0, targetY: 0,
-    env: 0,
-    frame: 0,
-    exitProgress: 0,
-  });
+  const exitTimerRef = useRef<number>(0);
 
-  /* ── Three.js setup ── */
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return;
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const anim = animRef.current;
-
-    /* Scene */
-    const scene = new THREE.Scene();
-    anim.scene = scene;
-
-    /* Camera */
-    const camera = new THREE.PerspectiveCamera(60, w / h, 1, 2000);
-    camera.position.z = 500;
-    anim.camera = camera;
-
-    /* Renderer — high-perf WebGL, cap pixel ratio on mobile */
-    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-    const renderer = new THREE.WebGLRenderer({
-      antialias: !isMobile,
-      alpha: true,
-      powerPreference: "high-performance",
-    });
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2.5));
-    mount.appendChild(renderer.domElement);
-    anim.renderer = renderer;
-
-    /* Point texture */
-    const texture = createPointTexture();
-
-    /* ── Create particle layers (different Z depths) ── */
-    const layers = DEPTH_LAYERS;
-    const pointsPerLayer = Math.floor(PARTICLE_COUNT / layers);
-    const points: THREE.Points[] = [];
-    const allGeos: THREE.BufferGeometry[] = [];
-    const allMats: THREE.PointsMaterial[] = [];
-
-    for (let l = 0; l < layers; l++) {
-      const zDepth = -200 + l * 160; /* spread along Z: -200 to +280 */
-      const spread = 350 + l * 80;   /* further layers spread wider */
-      const geo = new THREE.BufferGeometry();
-      const positions = new Float32Array(pointsPerLayer * 3);
-      const colors = new Float32Array(pointsPerLayer * 3);
-      const sizes = new Float32Array(pointsPerLayer);
-
-      for (let i = 0; i < pointsPerLayer; i++) {
-        positions[i * 3] = (Math.random() - 0.5) * spread * 2;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * spread * 1.4;
-        positions[i * 3 + 2] = zDepth + (Math.random() - 0.5) * 100;
-        sizes[i] = 2 + Math.random() * 5 * (1 - l * 0.2);
-        /* hue varies slightly per layer */
-        const hue = 0.55 + l * 0.04 + Math.random() * 0.06;
-        const col = new THREE.Color().setHSL(hue, 0.6, 0.5 + l * 0.12);
-        colors[i * 3] = col.r;
-        colors[i * 3 + 1] = col.g;
-        colors[i * 3 + 2] = col.b;
-      }
-
-      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-      geo.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
-      allGeos.push(geo);
-
-      const mat = new THREE.PointsMaterial({
-        size: 6,
-        map: texture,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.75,
-      });
-      allMats.push(mat);
-
-      const pts = new THREE.Points(geo, mat);
-      scene.add(pts);
-      points.push(pts);
-    }
-    anim.points = points;
-
-    /* ── Ambient floating particles (no depth, scattered all around) ── */
-    const ambientCount = 200;
-    const ambGeo = new THREE.BufferGeometry();
-    const ambPos = new Float32Array(ambientCount * 3);
-    for (let i = 0; i < ambientCount; i++) {
-      ambPos[i * 3] = (Math.random() - 0.5) * 1200;
-      ambPos[i * 3 + 1] = (Math.random() - 0.5) * 800;
-      ambPos[i * 3 + 2] = -300 + Math.random() * 600;
-    }
-    ambGeo.setAttribute("position", new THREE.BufferAttribute(ambPos, 3));
-    allGeos.push(ambGeo);
-    const ambMat = new THREE.PointsMaterial({
-      size: 2.5,
-      map: texture,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      color: new THREE.Color("#ffffff"),
-      transparent: true,
-      opacity: 0.3,
-    });
-    allMats.push(ambMat);
-    const ambient = new THREE.Points(ambGeo, ambMat);
-    scene.add(ambient);
-    points.push(ambient);
-
-    /* ── Resize ── */
-    const onResize = () => {
-      const nw = window.innerWidth;
-      const nh = window.innerHeight;
-      camera.aspect = nw / nh;
-      camera.updateProjectionMatrix();
-      renderer.setSize(nw, nh);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    };
-    window.addEventListener("resize", onResize);
-
-    /* ── Render loop ── */
-    let raf = 0;
-    const loop = () => {
-      anim.frame++;
-      const t = anim.frame * 0.01;
-
-      /* camera sway */
-      camera.position.x += (anim.targetX * 60 - camera.position.x) * 0.03;
-      camera.position.y += (anim.targetY * 40 - camera.position.y) * 0.03;
-      camera.lookAt(0, 0, 0);
-
-      /* rotate each layer at different speeds (parallax) */
-      points.forEach((pts, i) => {
-        if (i < layers) {
-          const speed = 0.08 + i * 0.025;
-          pts.rotation.y += speed * 0.008;
-          pts.rotation.x += speed * 0.004;
-        } else {
-          pts.rotation.y += 0.02;
-        }
-      });
-
-      /* exit animation */
-      if (exiting) {
-        anim.exitProgress += 0.008;
-        const ep = Math.min(anim.exitProgress, 1);
-        camera.position.z = 500 + ep * 800; /* zoom in */
-        renderer.domElement.style.opacity = String(1 - ep);
-        points.forEach((pts) => {
-          const mat = pts.material as THREE.PointsMaterial;
-          if (mat.opacity !== undefined) mat.opacity = 0.75 * (1 - ep);
-        });
-        if (ep >= 1) {
-          cancelAnimationFrame(raf);
-          setRemoved(true);
-          onDismissed();
-          return;
-        }
-      }
-
-      renderer.render(scene, camera);
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onResize);
-      /* full GPU disposal */
-      allGeos.forEach((g) => g.dispose());
-      allMats.forEach((m) => { m.map?.dispose(); m.dispose(); });
-      texture.dispose();
-      renderer.dispose();
-      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
-    };
-  }, [exiting, onDismissed]);
-
-  /* ── Spacebar → cycle environment ── */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === "Space") {
-        e.preventDefault();
-        animRef.current.env = (animRef.current.env + 1) % ENVIRONMENTS.length;
-        const env = ENVIRONMENTS[animRef.current.env];
-        animRef.current.points.forEach((pts) => {
-          if (Array.isArray(pts.material)) return;
-          const hsl = { h: 0, s: 0, l: 0 };
-          (pts.material as THREE.PointsMaterial).color!.getHSL(hsl);
-          const newCol = new THREE.Color(env.primary);
-          (pts.material as THREE.PointsMaterial).color!.set(newCol);
-        });
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  /* ── Pointer ── */
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    animRef.current.targetX = (e.clientX / window.innerWidth - 0.5) * 2;
-    animRef.current.targetY = -(e.clientY / window.innerHeight - 0.5) * 2;
-  }, []);
-  const handlePointerLeave = useCallback(() => {
-    animRef.current.targetX = 0;
-    animRef.current.targetY = 0;
-  }, []);
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    /* burst impulse — briefly shake the camera target */
-    animRef.current.targetX += (e.clientX / window.innerWidth - 0.5) * 3;
-    animRef.current.targetY += -(e.clientY / window.innerHeight - 0.5) * 3;
-  }, []);
-
-  /* ── Dismiss ── */
   const handleClick = useCallback(() => {
     if (exiting) return;
     setExiting(true);
-  }, [exiting]);
+    exitTimerRef.current = window.setTimeout(() => {
+      setRemoved(true);
+      onDismissed();
+    }, 2500);
+  }, [exiting, onDismissed]);
 
   if (removed) return null;
 
-  const env = ENVIRONMENTS[animRef.current.env];
-
   return (
     <div
-      ref={overlayRef}
       style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden", cursor: exiting ? "default" : "pointer",
-        userSelect: "none", WebkitTapHighlightColor: "transparent",
-        touchAction: "manipulation",
-        background: env.bg,
-        transition: "background 1s ease",
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "#020812",
+        cursor: exiting ? "default" : "pointer",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+        touchAction: "pan-x pan-y pinch-zoom",
+        opacity: exiting ? 0 : 1,
+        transition: "opacity 2s ease-out",
       }}
       onClick={handleClick}
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-      onPointerDown={handlePointerDown}
     >
-      {/* Three.js mount */}
-      <div
-        ref={mountRef}
-        style={{ position: "absolute", inset: 0, zIndex: 1 }}
-      />
+      <Suspense fallback={<Fallback />}>
+        <Canvas
+          gl={{
+            antialias: true,
+            powerPreference: "high-performance",
+            alpha: false,
+          }}
+          dpr={[1, 2]}
+        >
+          <Scene exiting={exiting} />
+        </Canvas>
+      </Suspense>
 
-      {/* Glass card */}
-      <div
-        className="splash-glass"
-        style={{
-          zIndex: 2,
-          opacity: exiting ? Math.max(0, 1 - (animRef.current.exitProgress || 0) * 2) : 1,
-          transition: "opacity 0.3s",
-        }}
-      >
-        <div className="splash-shimmer-line" />
-        <h1 className="splash-title">
-          <span className="splash-title-text">别问了自己搜</span>
-        </h1>
-        <div className="splash-rule">
-          <span className="splash-rule-diamond" />
-        </div>
-        <p className="splash-hint">轻触任意位置进入</p>
-        <p style={{
-          margin: 0, fontSize: "0.6rem", color: "rgba(255,255,255,.18)",
-          letterSpacing: "0.1em", fontFamily: "Inter, sans-serif",
+      {/* Overlay hint — only visible before click */}
+      {!exiting && (
+        <div style={{
+          position: "absolute",
+          bottom: "2rem",
+          left: 0, right: 0,
+          textAlign: "center",
+          pointerEvents: "none",
         }}>
-          空格切换场景 · {env.name}
-        </p>
-      </div>
+          <p style={{
+            margin: 0,
+            fontFamily: "'Inter', sans-serif",
+            fontSize: "0.7rem",
+            letterSpacing: "0.2em",
+            color: "rgba(255,255,255,.2)",
+            animation: "hintBreathe 2.8s ease-in-out infinite",
+          }}>
+            拖动探索宇宙 · 点击进入
+          </p>
+        </div>
+      )}
     </div>
   );
 }
