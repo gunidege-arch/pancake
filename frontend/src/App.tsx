@@ -208,29 +208,6 @@ export default function App() {
         }
       >
       <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* ── Mobile hamburger ─────────────────────────── */}
-      <button
-        style={{
-          position: "fixed", top: 10, left: 10, zIndex: 50,
-          width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center",
-          borderRadius: 10, border: "1px solid var(--border)", background: "var(--bg-card)",
-          color: "var(--text-secondary)", cursor: "pointer",
-        }}
-        className="lg:hidden"
-        onClick={() => setSidebarOpen((v) => !v)}
-        aria-label="Toggle sidebar"
-      >
-        {sidebarOpen ? (
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        ) : (
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        )}
-      </button>
-
       {/* ── Sidebar overlay (mobile) ──────────────────── */}
       {sidebarOpen && (
         <div
@@ -252,7 +229,10 @@ export default function App() {
           zIndex: 45,
           display: "flex",
           flexDirection: "column",
-          padding: "1rem 0.875rem",
+          paddingTop: "calc(1rem + env(safe-area-inset-top, 0px))",
+          paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+          paddingLeft: "0.875rem",
+          paddingRight: "0.875rem",
           gap: "0.875rem",
           transition: "left 0.2s cubic-bezier(.4,0,.2,1)",
         }}
@@ -343,14 +323,33 @@ export default function App() {
           overflowY: "auto",
         }}
       >
-        {/* Search area */}
+        {/* Search area — sidebar toggle + search bar */}
         <div style={{
           padding: "0.75rem 1rem",
-          paddingTop: "3.5rem",
+          paddingTop: `calc(${settings.viewMode === "mobile" ? "0.75rem" : "3.5rem"} + env(safe-area-inset-top, 0px))`,
           display: "flex",
           justifyContent: "center",
+          alignItems: "center",
+          gap: "0.5rem",
         }}>
-          <div style={{ width: "100%", maxWidth: 540 }}>
+          {/* Sidebar toggle — mobile only, sits beside the search bar */}
+          <button
+            className="lg:hidden"
+            onClick={() => setSidebarOpen((v) => !v)}
+            aria-label="Toggle sidebar"
+            style={{
+              width: 40, height: 40, minWidth: 40,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 20, border: "1px solid var(--border)", background: "var(--bg-card)",
+              color: "var(--text-muted)", cursor: "pointer",
+              transition: "color 0.15s, background 0.15s",
+            }}
+          >
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div style={{ width: "100%", maxWidth: 500 }}>
             <SearchBar onSearch={handleSearch} loading={loading} />
           </div>
         </div>
