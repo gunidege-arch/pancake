@@ -168,23 +168,22 @@ function SettingsPanel({
             </div>
             <div className="settings-option">
               <div>
-                <div className="settings-option-label">别问了自己搜</div>
-                <div className="settings-option-desc">版本 1.0.0 · 多源聚合小工具 🌸</div>
+                <div className="settings-option-label" style={{ fontFamily: "'Cinzel Decorative', 'ZCOOL XiaoWei', 'Noto Serif SC', serif", fontSize: "0.92rem", letterSpacing: "0.06em" }}>
+                  作者：高冷的菜煎饼
+                </div>
               </div>
             </div>
             <a
               className="settings-option"
-              href="https://github.com/pancake"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="mailto:gunidege@gmail.com"
               style={{ textDecoration: "none", color: "inherit" }}
             >
               <div>
-                <div className="settings-option-label">GitHub</div>
-                <div className="settings-option-desc">查看项目源码</div>
+                <div className="settings-option-label">意见反馈</div>
+                <div className="settings-option-desc">gunidege@gmail.com</div>
               </div>
-              <svg width="14" height="14" fill="none" stroke="var(--text-muted)" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              <svg width="15" height="15" fill="none" stroke="var(--text-muted)" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </a>
           </div>
