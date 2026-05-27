@@ -8,18 +8,23 @@ import SplashScreen from "./components/SplashScreen";
 import BookmarksPanel from "./components/BookmarksPanel";
 import ToastContainer from "./components/Toast";
 
+import NavContent from "./components/NavContent";
+import BottomSheet from "./components/BottomSheet";
+
 /* ── Settings types ─────────────────────────────────────── */
 type Theme = "dark" | "light";
 type Columns = "2" | "3" | "4";
 type ViewMode = "auto" | "mobile";
+type LayoutMode = "sidebar" | "bottom-sheet";
 
 interface Settings {
   theme: Theme;
   columns: Columns;
   viewMode: ViewMode;
+  layoutMode: LayoutMode;
 }
 
-const DEFAULT_SETTINGS: Settings = { theme: "dark", columns: "2", viewMode: "auto" };
+const DEFAULT_SETTINGS: Settings = { theme: "dark", columns: "2", viewMode: "auto", layoutMode: "bottom-sheet" };
 
 function loadSettings(): Settings {
   try {
@@ -125,6 +130,35 @@ function SettingsPanel({
                 onChange={(v) => onUpdate({ ...settings, viewMode: v ? "mobile" : "auto" })}
               />
             </div>
+
+            <div className="settings-option">
+              <div>
+                <div className="settings-option-label">导航布局</div>
+                <div className="settings-option-desc">选择侧边栏或底部抽屉模式</div>
+              </div>
+            </div>
+            <div className="settings-option" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.35rem", paddingTop: "0.4rem" }}>
+              {([
+                { value: "bottom-sheet" as LayoutMode, label: "底部抽屉", desc: "从底部滑出，适合单手操作" },
+                { value: "sidebar" as LayoutMode, label: "侧边栏", desc: "左侧导航，桌面端更高效" },
+              ]).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`layout-radio ${settings.layoutMode === opt.value ? "layout-radio-active" : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="layoutMode"
+                    checked={settings.layoutMode === opt.value}
+                    onChange={() => onUpdate({ ...settings, layoutMode: opt.value })}
+                  />
+                  <div>
+                    <div style={{ fontSize: "0.82rem" }}>{opt.label}</div>
+                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 1 }}>{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* 关于 */}
@@ -213,8 +247,8 @@ export default function App() {
         }
       >
       <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* ── Sidebar overlay (mobile) ──────────────────── */}
-      {sidebarOpen && (
+      {/* ── Sidebar overlay (mobile, sidebar mode only) ── */}
+      {settings.layoutMode === "sidebar" && sidebarOpen && (
         <div
           className="sidebar-overlay lg:hidden"
           style={{ position: "fixed", inset: 0, zIndex: 40 }}
@@ -222,112 +256,50 @@ export default function App() {
         />
       )}
 
-      {/* ── Sidebar ───────────────────────────────────── */}
-      <aside
-        className="sidebar"
-        style={{
-          position: sidebarOpen ? "fixed" : "fixed",
-          left: sidebarOpen ? 0 : -288,
-          top: 0,
-          bottom: 0,
-          width: 272,
-          zIndex: 45,
-          display: "flex",
-          flexDirection: "column",
-          paddingTop: "calc(1rem + env(safe-area-inset-top, 0px))",
-          paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
-          paddingLeft: "0.875rem",
-          paddingRight: "0.875rem",
-          gap: "0.875rem",
-          transition: "left 0.2s cubic-bezier(.4,0,.2,1)",
-        }}
-      >
-        {/* Brand */}
-        <div style={{ padding: "0.25rem 0.25rem 0.5rem", position: "relative" }}>
-          {/* decorative sparkles */}
-          <span style={{ position: "absolute", top: -2, left: 8, fontSize: "0.55rem", opacity: .7, pointerEvents: "none" }}>✦</span>
-          <span style={{ position: "absolute", top: 4, right: 14, fontSize: "0.45rem", opacity: .5, pointerEvents: "none" }}>✧</span>
-          <span style={{ position: "absolute", bottom: 0, left: "40%", fontSize: "0.4rem", opacity: .4, pointerEvents: "none" }}>·</span>
-
-          <h1 style={{
-            margin: 0,
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.25rem",
-            fontFamily: "'ZCOOL XiaoWei', 'Ma Shan Zheng', 'Noto Serif SC', cursive, serif",
-            fontWeight: 400,
-            letterSpacing: "0.05em",
-          }}>
-            <span style={{ fontSize: "0.75rem", display: "inline-block", animation: "none" }}>🌸</span>
-            <span style={{
-              fontSize: "0.88rem",
-              background: "linear-gradient(135deg, #ff85a2 0%, #fb7299 40%, #ff6090 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              textShadow: "0 0 12px rgba(251,114,153,.25)",
-              filter: "drop-shadow(0 1px 2px rgba(251,114,153,.2))",
-            }}>别问了自己搜</span>
-            <span style={{ fontSize: "0.75rem", display: "inline-block" }}>🌸</span>
-          </h1>
-
-          {/* lace-like divider */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.3rem",
-            marginTop: "0.3rem",
-          }}>
-            <span style={{ width: 20, height: 1, background: "linear-gradient(90deg, transparent, rgba(251,114,153,.35))" }} />
-            <span style={{ fontSize: "0.4rem", color: "rgba(251,114,153,.4)", lineHeight: 1 }}>♡</span>
-            <span style={{ width: 20, height: 1, background: "linear-gradient(90deg, rgba(251,114,153,.35), transparent)" }} />
-          </div>
-        </div>
-
-        {/* Source Manager */}
-        <SourceManager sources={sources} onAdd={addSource} onDelete={deleteSource} />
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Bookmarks button */}
-        <button
-          onClick={() => setBookmarksOpen(true)}
+      {/* ── SIDEBAR MODE ──────────────────────────────── */}
+      {settings.layoutMode === "sidebar" && (
+        <aside
+          className="sidebar sidebar-shell"
           style={{
-            display: "flex", alignItems: "center", gap: "0.6rem",
-            padding: "0.6rem 0.75rem", borderRadius: 10,
-            background: "var(--bg-card)", border: "1px solid var(--border)",
-            color: "var(--text-secondary)", cursor: "pointer",
-            fontSize: "0.84rem", fontWeight: 500,
-            transition: "background 0.15s, color 0.15s",
-            marginBottom: "0.35rem",
+            position: sidebarOpen ? "fixed" : "fixed",
+            left: sidebarOpen ? 0 : -288,
+            top: 0,
+            bottom: 0,
+            width: 272,
+            zIndex: 45,
+            display: "flex",
+            flexDirection: "column",
+            paddingTop: "calc(1rem + env(safe-area-inset-top, 0px))",
+            paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+            paddingLeft: "0.875rem",
+            paddingRight: "0.875rem",
+            gap: "0.875rem",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-card-hover)"; e.currentTarget.style.color = "var(--text-primary)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg-card)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
         >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-          </svg>
-          收藏 {bookmarks.length > 0 && <span style={{ background: "var(--accent)", color: "#fff", borderRadius: 10, padding: "0 0.4rem", fontSize: "0.68rem", fontWeight: 600, minWidth: 18, textAlign: "center", lineHeight: "18px" }}>{bookmarks.length}</span>}
-        </button>
+          <NavContent
+            sources={sources}
+            onAdd={addSource}
+            onDelete={deleteSource}
+            bookmarks={bookmarks}
+            onOpenBookmarks={() => setBookmarksOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        </aside>
+      )}
 
-        {/* Settings button */}
-        <button
-          onClick={() => setSettingsOpen(true)}
-          style={{
-            display: "flex", alignItems: "center", gap: "0.6rem",
-            padding: "0.6rem 0.75rem", borderRadius: 10,
-            background: "var(--bg-card)", border: "1px solid var(--border)",
-            color: "var(--text-secondary)", cursor: "pointer",
-            fontSize: "0.84rem", fontWeight: 500,
-            transition: "background 0.15s, color 0.15s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-card-hover)"; e.currentTarget.style.color = "var(--text-primary)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg-card)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-        >
-          <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          设置
-        </button>
-      </aside>
+      {/* ── BOTTOM-SHEET MODE ─────────────────────────── */}
+      {settings.layoutMode === "bottom-sheet" && (
+        <BottomSheet open={sidebarOpen} onClose={() => setSidebarOpen(false)}>
+          <NavContent
+            sources={sources}
+            onAdd={addSource}
+            onDelete={deleteSource}
+            bookmarks={bookmarks}
+            onOpenBookmarks={() => setBookmarksOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        </BottomSheet>
+      )}
 
       {/* ── Bookmarks panel ──────────────────────────── */}
       {bookmarksOpen && (
@@ -376,9 +348,9 @@ export default function App() {
           alignItems: "center",
           gap: "0.5rem",
         }}>
-          {/* Sidebar toggle — mobile only, sits beside the search bar */}
+          {/* Sidebar/bottom-sheet toggle */}
           <button
-            className="lg:hidden"
+            className={settings.layoutMode === "sidebar" ? "lg:hidden" : ""}
             onClick={() => setSidebarOpen((v) => !v)}
             aria-label="Toggle sidebar"
             style={{
