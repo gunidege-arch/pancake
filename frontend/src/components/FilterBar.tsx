@@ -1,4 +1,4 @@
-type Category = "video" | "article" | "link";
+type Category = "video" | "article" | "image" | "link";
 
 interface Props {
   active: Category;
@@ -9,6 +9,7 @@ interface Props {
 const CATEGORIES: { key: Category; label: string }[] = [
   { key: "video", label: "视频" },
   { key: "article", label: "文章" },
+  { key: "image", label: "图片" },
   { key: "link", label: "链接" },
 ];
 

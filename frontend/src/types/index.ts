@@ -37,7 +37,7 @@ export interface NormalizedCard {
   error: string | null;
   isBuiltin: boolean;
   content: string | null;
-  category: "video" | "article" | "link";
+  category: "video" | "article" | "image" | "link";
 }
 
 /**
@@ -72,6 +72,7 @@ export function normalizeResult(item: SearchResultItem): NormalizedCard {
   const itemType = item.type as string;
   const category: NormalizedCard["category"] =
     itemType === "video" ? "video" :
+    itemType === "content" && thumbnail ? "image" :
     itemType === "content" ? "article" :
     "link";
 

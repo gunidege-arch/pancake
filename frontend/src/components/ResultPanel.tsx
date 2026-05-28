@@ -4,11 +4,12 @@ import { normalizeResult } from "../types";
 import VideoCard from "./VideoCard";
 import VideoModal from "./VideoModal";
 import ArticleCard from "./ArticleCard";
+import ImageCard from "./ImageCard";
 import LinkCard from "./LinkCard";
 import FilterBar from "./FilterBar";
 import { showToast } from "./Toast";
 
-type Category = "video" | "article" | "link";
+type Category = "video" | "article" | "image" | "link";
 
 interface Props {
   results: SearchResultItem[];
@@ -44,6 +45,7 @@ export default function ResultPanel({ results, query, columns, isBookmarked, onT
   const counts = useMemo((): Record<Category, number> => ({
     video: cards.filter((c) => c.category === "video").length,
     article: cards.filter((c) => c.category === "article").length,
+    image: cards.filter((c) => c.category === "image").length,
     link: cards.filter((c) => c.category === "link").length,
   }), [cards]);
 
@@ -81,6 +83,8 @@ export default function ResultPanel({ results, query, columns, isBookmarked, onT
         return <VideoCard {...sharedProps} />;
       case "article":
         return <ArticleCard card={card} onOpen={handleOpen} />;
+      case "image":
+        return <ImageCard card={card} onOpen={handleOpen} />;
       case "link":
         return <LinkCard card={card} onOpen={handleOpen} />;
       default:
@@ -103,7 +107,7 @@ export default function ResultPanel({ results, query, columns, isBookmarked, onT
         </div>
       )}
 
-      {/* Video / Link / All — grid layout */}
+      {/* Video / Image / Link — grid layout */}
       {category !== "article" && (
         <div
           className="results-grid"
