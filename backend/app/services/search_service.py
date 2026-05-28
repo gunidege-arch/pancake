@@ -9,6 +9,7 @@ import trafilatura
 from bs4 import BeautifulSoup
 
 from ..schemas import SearchResultItem
+from .api_sources import search_api_source
 
 # ---------------------------------------------------------------------------
 # HTTP headers — full Chrome 120 fingerprint
@@ -957,19 +958,26 @@ def _build_content_result(
 
 async def search_all(
     query: str,
-    sources: List[Tuple[int, str, str, bool, bool]],
+    sources: List[Tuple[int, str, str, bool, bool, str]],
 ) -> List[SearchResultItem]:
-    """Run concurrent searches across all sources."""
+    """Run concurrent searches across all sources. Splits HTML and API sources."""
+    html_sources = [(s[0], s[1], s[2], s[3]) for s in sources if s[5] == "html"]
+    api_sources = [(s[0], s[1], s[2]) for s in sources if s[5] != "html"]
+
     async with httpx.AsyncClient(
         headers=BROWSER_HEADERS,
         follow_redirects=True,
         timeout=httpx.Timeout(REQUEST_TIMEOUT),
     ) as client:
-        tasks = [
+        html_tasks = [
             _search_single(src_id, src_name, template.replace("{query}", query), allow_embed, client)
-            for src_id, src_name, template, allow_embed, _is_builtin in sources
+            for src_id, src_name, template, allow_embed in html_sources
         ]
-        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+        api_tasks = [
+            search_api_source(template, query, src_id, src_name)
+            for src_id, src_name, template in api_sources
+        ]
+        raw_results = await asyncio.gather(*(html_tasks + api_tasks), return_exceptions=True)
 
     processed: List[SearchResultItem] = []
     for i, result in enumerate(raw_results):

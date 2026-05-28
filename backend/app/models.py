@@ -11,3 +11,4 @@ class SearchSource(Base):
     allow_embed = Column(Boolean, default=False)
     is_builtin = Column(Boolean, default=False)
     device_id = Column(String, nullable=True, default=None, index=True)
+    source_type = Column(String, nullable=False, default="html")  # "html" | "api"

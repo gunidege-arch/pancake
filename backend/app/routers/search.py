@@ -17,7 +17,7 @@ async def search(
     result = await db.execute(select(SearchSource).order_by(SearchSource.id))
     sources = result.scalars().all()
 
-    source_tuples = [(s.id, s.name, s.search_url_template, s.allow_embed, s.is_builtin) for s in sources]
+    source_tuples = [(s.id, s.name, s.search_url_template, s.allow_embed, s.is_builtin, s.source_type) for s in sources]
 
     results = await search_all(q, source_tuples)
 

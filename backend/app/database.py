@@ -47,6 +47,10 @@ BUILTIN_SOURCES = [
     {"name": "Medium", "url": "https://medium.com/search?q={query}"},
     {"name": "Vimeo", "url": "https://vimeo.com/search?q={query}", "embed": True},
     {"name": "Dailymotion", "url": "https://www.dailymotion.com/search/{query}", "embed": True},
+    {"name": "Hacker News", "url": "https://hn.algolia.com/?query={query}"},
+    # ── API 源 (JSON, 需 API Key) ──
+    {"name": "Unsplash", "url": "unsplash", "source_type": "api"},
+    {"name": "Pexels", "url": "pexels", "source_type": "api"},
 ]
 
 
@@ -66,6 +70,7 @@ async def _seed_builtins():
                     search_url_template=src["url"],
                     allow_embed=src.get("embed", False),
                     is_builtin=True,
+                    source_type=src.get("source_type", "html"),
                 ))
                 changed = True
             elif existing[src["name"]].search_url_template != src["url"]:
