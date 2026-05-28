@@ -40,8 +40,9 @@ BUILTIN_SOURCES = [
     {"name": "DuckDuckGo", "url": "https://duckduckgo.com/?q={query}"},
     {"name": "YouTube", "url": "https://www.youtube.com/results?search_query={query}", "embed": True},
     {"name": "Wikipedia", "url": "https://en.wikipedia.org/wiki/Special:Search?search={query}"},
-    {"name": "Reddit", "url": "https://www.reddit.com/search/?q={query}"},
+    {"name": "Reddit", "url": "https://old.reddit.com/search?q={query}"},
     {"name": "GitHub", "url": "https://github.com/search?q={query}"},
+    {"name": "Hacker News", "url": "https://hn.algolia.com/?query={query}"},
     {"name": "StackOverflow", "url": "https://stackoverflow.com/search?q={query}"},
     {"name": "Medium", "url": "https://medium.com/search?q={query}"},
     {"name": "Vimeo", "url": "https://vimeo.com/search?q={query}", "embed": True},
@@ -55,21 +56,23 @@ async def _seed_builtins():
         result = await session.execute(
             select(SearchSource).where(SearchSource.is_builtin == True)
         )
-        existing = result.scalars().all()
-        existing_names = {s.name for s in existing}
+        existing = {s.name: s for s in result.scalars().all()}
+        changed = False
 
-        added = False
         for src in BUILTIN_SOURCES:
-            if src["name"] not in existing_names:
+            if src["name"] not in existing:
                 session.add(SearchSource(
                     name=src["name"],
                     search_url_template=src["url"],
                     allow_embed=src.get("embed", False),
                     is_builtin=True,
                 ))
-                added = True
+                changed = True
+            elif existing[src["name"]].search_url_template != src["url"]:
+                existing[src["name"]].search_url_template = src["url"]
+                changed = True
 
-        if added:
+        if changed:
             await session.commit()
 
 
