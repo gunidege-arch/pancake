@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from ..schemas import SearchResultItem
 from .api_sources import search_api_source
+from .smart_scraper import smart_scrape
 
 # ---------------------------------------------------------------------------
 # HTTP headers — full Chrome 120 fingerprint
@@ -740,7 +741,7 @@ async def _search_single(
         ]
 
     # ── Content path (non-video, allow_embed=False) ───────────────────
-    return await _handle_content_source(source_id, source_name, url, client)
+    return await smart_scrape(query, url, source_id, source_name, client)
 
 
 async def _handle_video_source(
