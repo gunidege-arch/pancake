@@ -36,6 +36,8 @@ export interface NormalizedCard {
   originalUrl: string | null;
   error: string | null;
   isBuiltin: boolean;
+  content: string | null;
+  category: "video" | "article" | "link";
 }
 
 /**
@@ -67,6 +69,14 @@ export function normalizeResult(item: SearchResultItem): NormalizedCard {
     ? String(raw.error || "请求失败")
     : null;
 
+  const itemType = item.type as string;
+  const category: NormalizedCard["category"] =
+    itemType === "video" ? "video" :
+    itemType === "content" ? "article" :
+    "link";
+
+  const content = typeof raw.content === "string" ? raw.content : null;
+
   return {
     title,
     thumbnail,
@@ -75,5 +85,7 @@ export function normalizeResult(item: SearchResultItem): NormalizedCard {
     originalUrl,
     error,
     isBuiltin: Boolean(raw.is_builtin),
+    content,
+    category,
   };
 }

@@ -1049,3 +1049,15 @@ iframe { border: none; }
     flex-shrink: 0;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER BAR & POLYMORPHIC CARDS
+   ═══════════════════════════════════════════════════════════ */
+.results-grid .rc-card {
+  animation: cardIn .35s ease both;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
