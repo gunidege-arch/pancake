@@ -26,14 +26,22 @@ export default function ResultPanel({ results, query, columns, isBookmarked, onT
   const closeModal = useCallback(() => setModal(null), []);
 
   const cards: NormalizedCard[] = useMemo(
-    () => results.map(normalizeResult),
+    () => results.map(normalizeResult).filter((c) => !c.error),
     [results],
   );
+
+  if (results.length === 0) {
+    return (
+      <p style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", fontSize: "0.88rem" }}>
+        搜索 &quot;{query}&quot; — 未找到结果
+      </p>
+    );
+  }
 
   if (cards.length === 0) {
     return (
       <p style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", fontSize: "0.88rem" }}>
-        未配置搜索源，请先在侧边栏添加。
+        搜索 &quot;{query}&quot; — 所有来源均无法访问
       </p>
     );
   }

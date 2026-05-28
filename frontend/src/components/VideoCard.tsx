@@ -74,7 +74,7 @@ export default function VideoCard({ card, onOpen, bookmarked, onToggleBookmark }
         <div className="rc-info">
           <p className="rc-title" title={card.title}>{card.title}</p>
           <span className="rc-source-tag">
-            {isError ? card.error : `来源：${card.sourceName}`}
+            {isError ? card.error : card.isBuiltin ? "" : `来源：${card.sourceName}`}
           </span>
         </div>
       </button>

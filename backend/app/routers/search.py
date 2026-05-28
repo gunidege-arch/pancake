@@ -17,8 +17,13 @@ async def search(
     result = await db.execute(select(SearchSource).order_by(SearchSource.id))
     sources = result.scalars().all()
 
-    source_tuples = [(s.id, s.name, s.search_url_template, s.allow_embed) for s in sources]
+    source_tuples = [(s.id, s.name, s.search_url_template, s.allow_embed, s.is_builtin) for s in sources]
 
     results = await search_all(q, source_tuples)
+
+    # Tag results from built-in sources
+    builtin_ids = {s.id for s in sources if s.is_builtin}
+    for r in results:
+        r.is_builtin = r.source_id in builtin_ids
 
     return SearchResponse(query=q, results=results)

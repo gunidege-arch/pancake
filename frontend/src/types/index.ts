@@ -35,6 +35,7 @@ export interface NormalizedCard {
   sourceName: string;
   originalUrl: string | null;
   error: string | null;
+  isBuiltin: boolean;
 }
 
 /**
@@ -73,5 +74,6 @@ export function normalizeResult(item: SearchResultItem): NormalizedCard {
     sourceName: item.source_name,
     originalUrl,
     error,
+    isBuiltin: Boolean(raw.is_builtin),
   };
 }

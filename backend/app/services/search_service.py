@@ -957,14 +957,9 @@ def _build_content_result(
 
 async def search_all(
     query: str,
-    sources: List[Tuple[int, str, str, bool]],
+    sources: List[Tuple[int, str, str, bool, bool]],
 ) -> List[SearchResultItem]:
-    """Run concurrent searches across all sources.
-
-    Each source may now return **multiple** results (e.g. a Bilibili search
-    page with 20 video cards).  All lists are flattened into a single
-    ``List[SearchResultItem]`` for the frontend.
-    """
+    """Run concurrent searches across all sources."""
     async with httpx.AsyncClient(
         headers=BROWSER_HEADERS,
         follow_redirects=True,
@@ -972,7 +967,7 @@ async def search_all(
     ) as client:
         tasks = [
             _search_single(src_id, src_name, template.replace("{query}", query), allow_embed, client)
-            for src_id, src_name, template, allow_embed in sources
+            for src_id, src_name, template, allow_embed, _is_builtin in sources
         ]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 

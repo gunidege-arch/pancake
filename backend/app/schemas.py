@@ -39,6 +39,7 @@ class SearchResultItem(BaseModel):
     title: Optional[str] = None
     embed_url: Optional[str] = None
     video_url: Optional[str] = None
+    is_builtin: bool = False
 
 
 class SearchResponse(BaseModel):
