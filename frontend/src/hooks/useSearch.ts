@@ -2,6 +2,14 @@ import { useState, useCallback } from "react";
 import type { SearchResponse, SearchSource } from "../types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+
+if (!BASE_URL && import.meta.env.PROD) {
+  console.warn(
+    "⚠️ VITE_API_BASE_URL is not set. API calls will go to the Vercel domain and fail. " +
+    "Add VITE_API_BASE_URL=https://pancake-simr.onrender.com in Vercel → Settings → Environment Variables, then redeploy."
+  );
+}
+
 const API_BASE = BASE_URL ? `${BASE_URL}/api` : "/api";
 
 export function useSearch() {
