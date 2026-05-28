@@ -1,4 +1,4 @@
-type Category = "all" | "article" | "video" | "link";
+type Category = "video" | "article" | "link";
 
 interface Props {
   active: Category;
@@ -6,11 +6,10 @@ interface Props {
   onChange: (c: Category) => void;
 }
 
-const CATEGORIES: { key: Category; label: string; icon: string }[] = [
-  { key: "all", label: "全部", icon: "" },
-  { key: "article", label: "文章", icon: "" },
-  { key: "video", label: "视频", icon: "" },
-  { key: "link", label: "链接", icon: "" },
+const CATEGORIES: { key: Category; label: string }[] = [
+  { key: "video", label: "视频" },
+  { key: "article", label: "文章" },
+  { key: "link", label: "链接" },
 ];
 
 export default function FilterBar({ active, counts, onChange }: Props) {

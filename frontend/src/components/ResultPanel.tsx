@@ -8,7 +8,7 @@ import LinkCard from "./LinkCard";
 import FilterBar from "./FilterBar";
 import { showToast } from "./Toast";
 
-type Category = "all" | "article" | "video" | "link";
+type Category = "video" | "article" | "link";
 
 interface Props {
   results: SearchResultItem[];
@@ -27,7 +27,7 @@ interface ModalData {
 
 export default function ResultPanel({ results, query, columns, isBookmarked, onToggleBookmark }: Props) {
   const [modal, setModal] = useState<ModalData | null>(null);
-  const [category, setCategory] = useState<Category>("all");
+  const [category, setCategory] = useState<Category>("video");
   const openModal = useCallback((data: ModalData) => setModal(data), []);
   const closeModal = useCallback(() => setModal(null), []);
 
@@ -37,14 +37,13 @@ export default function ResultPanel({ results, query, columns, isBookmarked, onT
   );
 
   const filtered = useMemo(
-    () => category === "all" ? cards : cards.filter((c) => c.category === category),
+    () => cards.filter((c) => c.category === category),
     [cards, category],
   );
 
   const counts = useMemo((): Record<Category, number> => ({
-    all: cards.length,
-    article: cards.filter((c) => c.category === "article").length,
     video: cards.filter((c) => c.category === "video").length,
+    article: cards.filter((c) => c.category === "article").length,
     link: cards.filter((c) => c.category === "link").length,
   }), [cards]);
 
