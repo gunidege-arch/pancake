@@ -74,6 +74,20 @@ async def _seed_builtins():
 
 
 async def init_db():
+    """Create tables and migrate old schema if needed."""
+    from .models import SearchSource
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Auto-migrate: add missing columns from old schema
+    async with async_session() as session:
+        try:
+            await session.execute(select(SearchSource.is_builtin).limit(1))
+        except Exception:
+            # Old database without is_builtin column — drop and recreate
+            async with engine.begin() as conn:
+                await conn.run_sync(SearchSource.__table__.drop, checkfirst=True)
+                await conn.run_sync(Base.metadata.create_all)
+
     await _seed_builtins()
