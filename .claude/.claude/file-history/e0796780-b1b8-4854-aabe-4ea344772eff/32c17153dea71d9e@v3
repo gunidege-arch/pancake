@@ -1,0 +1,180 @@
+import { useState, useCallback } from "react";
+import type { SearchResultItem } from "../types";
+import EmbedFrame from "./EmbedFrame";
+import VideoCard from "./VideoCard";
+import VideoModal from "./VideoModal";
+
+interface Props {
+  results: SearchResultItem[];
+  query: string;
+}
+
+interface ModalData {
+  title: string;
+  embedUrl: string;
+  originalUrl: string;
+  sourceName: string;
+}
+
+export default function ResultPanel({ results, query }: Props) {
+  const [modal, setModal] = useState<ModalData | null>(null);
+
+  const openModal = useCallback((data: ModalData) => setModal(data), []);
+  const closeModal = useCallback(() => setModal(null), []);
+
+  if (results.length === 0) {
+    return <p className="text-gray-400 text-center py-8">未配置搜索源，请先在侧边栏添加。</p>;
+  }
+
+  const videoResults = results.filter((r) => r.type === "video");
+  const otherResults = results.filter((r) => r.type !== "video");
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-4">
+        搜索 &quot;{query}&quot; — 共 {results.length} 个来源
+      </p>
+
+      {/* ── Video grid ──────────────────────────────────── */}
+      {videoResults.length > 0 && (
+        <section className="mb-8">
+          <h2 className="section-heading">
+            <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            视频结果 ({videoResults.length})
+          </h2>
+          <div className="video-grid">
+            {videoResults.map((item, idx) => (
+              <VideoCard
+                key={`video-${item.source_id}-${idx}`}
+                title={item.title || item.source_name}
+                thumbnailUrl={item.thumbnail_url}
+                sourceName={item.source_name}
+                onWatch={() =>
+                  openModal({
+                    title: item.title || item.source_name,
+                    embedUrl: item.embed_url || item.url || "",
+                    originalUrl: item.original_url || item.url || "",
+                    sourceName: item.source_name,
+                  })
+                }
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Webpage / embed / error results ─────────────── */}
+      {otherResults.length > 0 && (
+        <section>
+          <h2 className="section-heading">
+            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            网页结果 ({otherResults.length})
+          </h2>
+          <div className="webpage-grid">
+            {otherResults.map((item, idx) => (
+              <div
+                key={`card-${item.source_id}-${idx}`}
+                className="result-card"
+              >
+                {/* Header */}
+                <div className="result-card-header">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {item.thumbnail_url && (
+                      <img
+                        src={item.thumbnail_url}
+                        alt=""
+                        className="w-6 h-6 rounded object-cover shrink-0"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    )}
+                    <span className="font-medium text-sm text-gray-700 truncate">
+                      {item.source_name}
+                    </span>
+                  </div>
+                  <span className={`result-card-badge ${badgeStyle(item.type)}`}>
+                    {badgeLabel(item.type)}
+                  </span>
+                </div>
+
+                {/* Body */}
+                <div className="result-card-body">
+                  {item.title && item.type === "content" && (
+                    <h3 className="text-base font-semibold text-gray-900 mb-2 leading-snug px-4 pt-3">
+                      {item.title}
+                    </h3>
+                  )}
+
+                  {item.type === "embed" && item.url && (
+                    <EmbedFrame
+                      url={item.url}
+                      sourceName={item.source_name}
+                      originalUrl={item.original_url}
+                    />
+                  )}
+
+                  {item.type === "content" && item.content && (
+                    <div
+                      className="result-content text-sm leading-relaxed text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: item.content }}
+                    />
+                  )}
+
+                  {item.type === "error" && (
+                    <div className="p-4 text-sm text-red-500 bg-red-50 rounded-lg m-3">
+                      <p className="font-medium">请求失败</p>
+                      <p className="text-xs mt-1 opacity-75">{item.error}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Modal ────────────────────────────────────────── */}
+      <VideoModal
+        open={modal !== null}
+        onClose={closeModal}
+        title={modal?.title ?? ""}
+        embedUrl={modal?.embedUrl ?? ""}
+        originalUrl={modal?.originalUrl ?? ""}
+        sourceName={modal?.sourceName ?? ""}
+      />
+    </div>
+  );
+}
+
+function badgeStyle(type: string): string {
+  switch (type) {
+    case "error":
+      return "badge-error";
+    case "content":
+      return "badge-content";
+    case "embed":
+      return "badge-embed";
+    default:
+      return "badge-default";
+  }
+}
+
+function badgeLabel(type: string): string {
+  switch (type) {
+    case "error":
+      return "错误";
+    case "content":
+      return "内容";
+    case "embed":
+      return "嵌入";
+    default:
+      return type;
+  }
+}

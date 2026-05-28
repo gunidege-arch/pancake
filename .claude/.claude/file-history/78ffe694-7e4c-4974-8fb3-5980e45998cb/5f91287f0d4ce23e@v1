@@ -1,0 +1,29 @@
+# --- Python 运行环境与缓存 ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv/
+venv/
+env/
+.pytest_cache/
+.python-version
+
+# --- Node.js / 前端开发产物 ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+package-lock.json.lock
+
+# --- 编辑器与系统临时文件 ---
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp
+*.bak

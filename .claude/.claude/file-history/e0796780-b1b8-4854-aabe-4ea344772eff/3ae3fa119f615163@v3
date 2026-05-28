@@ -1,0 +1,296 @@
+import asyncio
+import re
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse, urlunparse
+
+import httpx
+import trafilatura
+from bs4 import BeautifulSoup
+
+from ..schemas import SearchResultItem
+
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
+
+REQUEST_TIMEOUT = 12.0
+
+EMBED_FRIENDLY_HOSTS: Dict[str, str] = {
+    "www.reddit.com": "old.reddit.com",
+    "reddit.com": "old.reddit.com",
+}
+
+# ---------------------------------------------------------------------------
+# Video platform detection & embed-url resolution
+# ---------------------------------------------------------------------------
+VIDEO_PLATFORMS: Dict[str, dict] = {
+    "youtube.com": {
+        "pattern": re.compile(
+            r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/)([a-zA-Z0-9_-]{11})"
+        ),
+        "embed": "https://www.youtube.com/embed/{video_id}",
+        "thumbnail": "https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+        "label": "YouTube",
+    },
+    "bilibili.com": {
+        "pattern": re.compile(r"bilibili\.com/video/(BV[a-zA-Z0-9]+)"),
+        "embed": "https://player.bilibili.com/player.html?bvid={video_id}&page=1",
+        "thumbnail": None,  # fetched from og:image
+        "label": "Bilibili",
+    },
+    "vimeo.com": {
+        "pattern": re.compile(r"vimeo\.com/(\d+)"),
+        "embed": "https://player.vimeo.com/video/{video_id}",
+        "thumbnail": None,
+        "label": "Vimeo",
+    },
+    "dailymotion.com": {
+        "pattern": re.compile(r"dailymotion\.com/video/([a-zA-Z0-9]+)"),
+        "embed": "https://www.dailymotion.com/embed/video/{video_id}",
+        "thumbnail": None,
+        "label": "Dailymotion",
+    },
+}
+
+
+def _classify_resource(url: str) -> str:
+    """Classify a URL as 'video' or 'webpage' based on known video platform domains."""
+    lower = url.lower()
+    for domain in VIDEO_PLATFORMS:
+        if domain in lower:
+            return "video"
+    return "webpage"
+
+
+def _get_video_metadata(url: str) -> dict:
+    """Return embed_url and thumbnail_url for a known video URL (or empty dict)."""
+    lower = url.lower()
+    for domain, cfg in VIDEO_PLATFORMS.items():
+        if domain in lower:
+            m = cfg["pattern"].search(url)
+            if m:
+                video_id = m.group(1)
+                meta: dict = {"embed_url": cfg["embed"].format(video_id=video_id)}
+                if cfg["thumbnail"]:
+                    meta["thumbnail_url"] = cfg["thumbnail"].format(video_id=video_id)
+                return meta
+    return {}
+
+
+def _extract_metadata(html: str) -> dict:
+    """Extract og:title / title and og:image / twitter:image from HTML."""
+    soup = BeautifulSoup(html, "lxml")
+    title = None
+    thumbnail = None
+
+    og_title = soup.find("meta", property="og:title")
+    if og_title and og_title.get("content"):
+        title = og_title["content"].strip()
+
+    if not title:
+        title_tag = soup.find("title")
+        if title_tag:
+            title = title_tag.get_text(strip=True)
+
+    og_image = soup.find("meta", property="og:image")
+    if og_image and og_image.get("content"):
+        thumbnail = og_image["content"]
+
+    if not thumbnail:
+        tw_image = soup.find("meta", attrs={"name": "twitter:image"})
+        if tw_image and tw_image.get("content"):
+            thumbnail = tw_image["content"]
+
+    return {"title": title, "thumbnail_url": thumbnail}
+
+
+# ---------------------------------------------------------------------------
+# Helpers (kept from original)
+# ---------------------------------------------------------------------------
+def _try_embed_friendly_url(url: str) -> str:
+    """Attempt to rewrite a URL to a mobile or embed-friendly version."""
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if host in EMBED_FRIENDLY_HOSTS:
+        new_host = EMBED_FRIENDLY_HOSTS[host]
+        return urlunparse(parsed._replace(netloc=new_host))
+
+    if host.startswith("www."):
+        mobile_host = "m." + host[4:]
+        return urlunparse(parsed._replace(netloc=mobile_host))
+
+    return url
+
+
+def _extract_readable_content(html: str, url: str) -> str:
+    """Extract main content from HTML using trafilatura with BeautifulSoup fallback."""
+    extracted = trafilatura.extract(
+        html,
+        output_format="html",
+        include_links=True,
+        include_images=False,
+        include_tables=False,
+        url=url,
+    )
+
+    if extracted and len(extracted.strip()) > 100:
+        return extracted
+
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "iframe"]):
+        tag.decompose()
+
+    main = soup.find("main") or soup.find("article") or soup.find(role="main") or soup.body
+    if main:
+        return str(main)
+
+    return "<p>No readable content extracted.</p>"
+
+
+# ---------------------------------------------------------------------------
+# Core search
+# ---------------------------------------------------------------------------
+async def _search_single(
+    source_id: int,
+    source_name: str,
+    url: str,
+    allow_embed: bool,
+    client: httpx.AsyncClient,
+) -> SearchResultItem:
+    """Search a single source. All exceptions are caught and returned as error results."""
+    resource_type = _classify_resource(url)
+
+    # ── Video path ────────────────────────────────────────────────────
+    if resource_type == "video":
+        video_meta = _get_video_metadata(url)
+        embed_url = video_meta.get("embed_url", url)
+        thumbnail_url = video_meta.get("thumbnail_url")
+        title = None
+
+        # Try to fetch the page for richer metadata (title, og:image)
+        try:
+            resp = await client.get(url, timeout=REQUEST_TIMEOUT, headers=BROWSER_HEADERS)
+            resp.raise_for_status()
+            meta = _extract_metadata(resp.text)
+            title = meta.get("title")
+            if not thumbnail_url:
+                thumbnail_url = meta.get("thumbnail_url")
+        except httpx.TimeoutException:
+            print(f"[SEARCH ERROR] Timeout fetching video meta '{source_name}' ({url})")
+        except httpx.HTTPStatusError as e:
+            print(f"[SEARCH ERROR] HTTP {e.response.status_code} fetching video meta '{source_name}' ({url})")
+        except Exception as e:
+            print(f"[SEARCH ERROR] {type(e).__name__}: {e} fetching video meta '{source_name}' ({url})")
+
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="video",
+            success=True,
+            url=embed_url,
+            original_url=url,
+            resource_type="video",
+            thumbnail_url=thumbnail_url,
+            title=title or source_name,
+            embed_url=embed_url,
+        )
+
+    # ── Embed path (non-video, allow_embed=True) ──────────────────────
+    if allow_embed:
+        embed_url = _try_embed_friendly_url(url)
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="embed",
+            success=True,
+            url=embed_url,
+            resource_type="webpage",
+        )
+
+    # ── Content path (non-video, allow_embed=False) ───────────────────
+    try:
+        response = await client.get(url, timeout=REQUEST_TIMEOUT, headers=BROWSER_HEADERS)
+        response.raise_for_status()
+
+        content = _extract_readable_content(response.text, url)
+        meta = _extract_metadata(response.text)
+
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="content",
+            success=True,
+            content=content,
+            original_url=url,
+            resource_type="webpage",
+            thumbnail_url=meta.get("thumbnail_url"),
+            title=meta.get("title"),
+        )
+    except httpx.TimeoutException:
+        print(f"[SEARCH ERROR] Timeout fetching '{source_name}' ({url})")
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="error",
+            success=False,
+            error="Request timed out",
+        )
+    except httpx.HTTPStatusError as e:
+        print(f"[SEARCH ERROR] HTTP {e.response.status_code} fetching '{source_name}' ({url})")
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="error",
+            success=False,
+            error=f"HTTP {e.response.status_code}",
+        )
+    except Exception as e:
+        print(f"[SEARCH ERROR] {type(e).__name__}: {e} fetching '{source_name}' ({url})")
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="error",
+            success=False,
+            error=str(e)[:200],
+        )
+
+
+async def search_all(
+    query: str,
+    sources: List[Tuple[int, str, str, bool]],
+) -> List[SearchResultItem]:
+    """Run concurrent searches across all sources. Single-source failures never crash the batch."""
+    async with httpx.AsyncClient(
+        headers=BROWSER_HEADERS,
+        follow_redirects=True,
+        timeout=httpx.Timeout(REQUEST_TIMEOUT),
+    ) as client:
+        tasks = [
+            _search_single(src_id, src_name, template.replace("{query}", query), allow_embed, client)
+            for src_id, src_name, template, allow_embed in sources
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    processed: List[SearchResultItem] = []
+    for i, result in enumerate(results):
+        if isinstance(result, SearchResultItem):
+            processed.append(result)
+        else:
+            processed.append(
+                SearchResultItem(
+                    source_id=sources[i][0],
+                    source_name=sources[i][1],
+                    type="error",
+                    success=False,
+                    error=str(result)[:200],
+                )
+            )
+
+    return processed

@@ -1,0 +1,44 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        alipay: {
+          blue: '#1677FF',
+          'blue-dark': '#0958D9',
+          'blue-light': '#E6F4FF',
+          'blue-gradient-start': '#1677FF',
+          'blue-gradient-end': '#0958D9',
+          bg: '#F5F5F5',
+          card: '#FFFFFF',
+          text: '#333333',
+          'text-secondary': '#666666',
+          'text-tertiary': '#999999',
+          green: '#19C019',
+          orange: '#FF6B35',
+          divider: '#EEEEEE',
+        },
+      },
+      fontFamily: {
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Microsoft YaHei"', '"Helvetica Neue"', 'sans-serif'],
+      },
+      borderRadius: {
+        card: '12px',
+        btn: '8px',
+        pill: '24px',
+      },
+      fontSize: {
+        'balance': ['28px', '36px'],
+        'balance-sm': ['20px', '28px'],
+      },
+      spacing: {
+        '18': '72px',
+      },
+    },
+  },
+  plugins: [],
+}

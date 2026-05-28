@@ -1,0 +1,538 @@
+import asyncio
+import re
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse, urlunparse
+
+import httpx
+import trafilatura
+from bs4 import BeautifulSoup
+
+from ..schemas import SearchResultItem
+
+# ---------------------------------------------------------------------------
+# HTTP headers — full Chrome 120 fingerprint
+# ---------------------------------------------------------------------------
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "max-age=0",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-CH-UA": '"Google Chrome";v="120", "Not?A_Brand";v="8", "Chromium";v="120"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": '"Windows"',
+    "Connection": "keep-alive",
+}
+
+REQUEST_TIMEOUT = 12.0
+
+
+def _build_request_headers(url: str) -> dict:
+    """Return browser-like headers with a dynamic Referer.
+
+    The Referer is set to ``https://www.google.com/`` so the request
+    appears to originate from a Google search click — this is one of the
+    most effective ways to avoid 403 / bot-detection blocks.
+    """
+    headers = dict(BROWSER_HEADERS)
+    headers["Referer"] = "https://www.google.com/"
+    return headers
+
+
+# ---------------------------------------------------------------------------
+# Sites that serve empty shells without JS rendering → route to Playwright
+# ---------------------------------------------------------------------------
+JS_REQUIRED_HOSTS: set = {
+    "douyin.com", "www.douyin.com", "live.douyin.com",
+    "weibo.com", "www.weibo.com", "m.weibo.cn", "s.weibo.com",
+    "xiaohongshu.com", "www.xiaohongshu.com",
+    "zhihu.com", "www.zhihu.com",
+    "taobao.com", "www.taobao.com",
+    "jd.com", "www.jd.com", "item.jd.com",
+}
+
+# When the extracted content is unreadable we return this message.
+UNSUPPORTED_PREVIEW_MSG = (
+    '<div style="text-align:center;padding:2.5rem 1rem;color:#6b7280;">'
+    '<p style="font-size:1.1rem;font-weight:600;margin:0 0 0.5rem;">'
+    '该源暂不支持直接预览</p>'
+    '<p style="font-size:0.85rem;margin:0;">请点击跳转查看原始页面</p>'
+    '</div>'
+)
+
+
+def _needs_js_render(url: str) -> bool:
+    """Return True if the URL's host is known to require JS rendering."""
+    host = urlparse(url).netloc.lower()
+    # Strip port if present
+    host = host.split(":")[0]
+    return host in JS_REQUIRED_HOSTS
+
+
+# ---------------------------------------------------------------------------
+# Encoding detection & safe decode
+# ---------------------------------------------------------------------------
+def _decode_response_bytes(content: bytes, content_type: str = "") -> str:
+    """Decode HTTP response bytes with multi-level encoding detection.
+
+    Chinese sites (Douyin, Weibo, etc.) often serve GBK / GB2312 without
+    setting the charset in Content-Type, causing httpx to default to UTF-8
+    and produce garbled text.  This function tries (in order):
+
+    1. charset from the Content-Type header
+    2. ``<meta charset>`` in the HTML head
+    3. UTF-8
+    4. Common CJK encodings (gbk, gb18030, gb2312, big5, shift_jis, euc-kr)
+    5. UTF-8 with replacement characters (last resort)
+    """
+    if not content:
+        return ""
+
+    # 1. Content-Type charset  -------------------------------------------
+    if content_type:
+        ct_lower = content_type.lower()
+        if "charset=" in ct_lower:
+            charset = ct_lower.split("charset=")[-1].strip().strip("\"' ;")
+            try:
+                return content.decode(charset)
+            except (LookupError, UnicodeDecodeError):
+                pass
+
+    # 2. <meta charset> in the first 4 KB  --------------------------------
+    head = content[:4096].decode("ascii", errors="ignore")
+    match = re.search(
+        r'<meta[^>]+charset=["\']?\s*([a-zA-Z0-9\-_]+)',
+        head,
+        re.IGNORECASE,
+    )
+    if match:
+        charset = match.group(1).lower()
+        # Normalise aliases
+        _alias: dict = {"gbk": "gbk", "gb2312": "gbk", "gb18030": "gb18030"}
+        charset = _alias.get(charset, charset)
+        try:
+            return content.decode(charset)
+        except (LookupError, UnicodeDecodeError):
+            pass
+
+    # 3. UTF-8 (most common)  --------------------------------------------
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+
+    # 4. Common CJK encodings  -------------------------------------------
+    for enc in ("gbk", "gb18030", "gb2312", "big5", "shift_jis", "euc-kr", "euc-jp"):
+        try:
+            decoded = content.decode(enc)
+            # Sanity: replacement-char ratio below 1%
+            if decoded.count("�") / max(len(decoded), 1) < 0.01:
+                return decoded
+        except (UnicodeDecodeError, LookupError):
+            continue
+
+    # 5. Desperate fallback  ---------------------------------------------
+    return content.decode("utf-8", errors="replace")
+
+
+# ---------------------------------------------------------------------------
+# Garbled / binary data detection
+# ---------------------------------------------------------------------------
+def _is_unreadable(text: str) -> bool:
+    """Return True if *text* appears to be binary garbage or an empty shell."""
+    if not text or len(text.strip()) < 80:
+        return True
+
+    # Replacement-char ratio > 3%  →  bad decode
+    if text.count("�") / max(len(text), 1) > 0.03:
+        return True
+
+    # Null bytes in text  →  binary payload
+    if "\x00" in text[:4096]:
+        return True
+
+    # Extremely high tag-to-text ratio  →  JS shell with no readable content
+    tag_chars = text.count("<") + text.count(">")
+    if tag_chars / max(len(text), 1) > 0.25:
+        stripped = BeautifulSoup(text, "lxml").get_text(separator=" ", strip=True)
+        if len(stripped) < 120:
+            return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Playwright browser (lazy singleton)
+# ---------------------------------------------------------------------------
+_browser = None
+_browser_lock = asyncio.Lock()
+_browser_semaphore = asyncio.Semaphore(3)  # limit concurrent browser tabs
+
+
+async def _get_browser():
+    """Return a shared headless Chromium browser instance."""
+    global _browser
+    if _browser is None:
+        async with _browser_lock:
+            if _browser is None:
+                from playwright.async_api import async_playwright
+
+                pw = await async_playwright().start()
+                _browser = await pw.chromium.launch(
+                    headless=True,
+                    args=["--disable-dev-shm-usage", "--no-sandbox"],
+                )
+    return _browser
+
+
+async def _fetch_with_browser(url: str) -> str:
+    """Fetch a JS-rendered page using Playwright.  Returns the final HTML."""
+    browser = await _get_browser()
+    async with _browser_semaphore:
+        context = await browser.new_context(
+            user_agent=BROWSER_HEADERS["User-Agent"],
+            viewport={"width": 1920, "height": 1080},
+            locale="zh-CN",
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            # Extra wait for async content
+            await asyncio.sleep(1.5)
+            return await page.content()
+        finally:
+            await context.close()
+
+
+# ---------------------------------------------------------------------------
+# Unified fetch helper
+# ---------------------------------------------------------------------------
+async def _fetch_html(client: httpx.AsyncClient, url: str) -> str:
+    """Fetch page HTML.
+
+    Uses httpx for normal sites and Playwright for sites that require JS
+    rendering (Douyin, Weibo, etc.).  Raw bytes are decoded via the
+    multi-encoding detection pipeline.
+    """
+    needs_js = _needs_js_render(url)
+
+    if needs_js:
+        html = await _fetch_with_browser(url)
+        return html
+
+    # Fast path: plain httpx  -------------------------------------------
+    resp = await client.get(
+        url,
+        timeout=REQUEST_TIMEOUT,
+        headers=_build_request_headers(url),
+    )
+    resp.raise_for_status()
+
+    content_type = resp.headers.get("content-type", "")
+    text = _decode_response_bytes(resp.content, content_type)
+
+    # If the result looks like a JS shell, try Playwright as fallback
+    if _is_unreadable(text):
+        print(f"[SEARCH INFO] httpx returned shell for '{url}', trying Playwright…")
+        try:
+            text = await _fetch_with_browser(url)
+        except Exception as e:
+            print(f"[SEARCH WARN] Playwright fallback also failed: {e}")
+
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Video platform detection & embed-url resolution
+# ---------------------------------------------------------------------------
+VIDEO_PLATFORMS: Dict[str, dict] = {
+    "youtube.com": {
+        "pattern": re.compile(
+            r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/)([a-zA-Z0-9_-]{11})"
+        ),
+        "embed": "https://www.youtube.com/embed/{video_id}",
+        "thumbnail": "https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+        "label": "YouTube",
+    },
+    "bilibili.com": {
+        "pattern": re.compile(r"bilibili\.com/video/(BV[a-zA-Z0-9]+)"),
+        "embed": "https://player.bilibili.com/player.html?bvid={video_id}&page=1",
+        "thumbnail": None,
+        "label": "Bilibili",
+    },
+    "vimeo.com": {
+        "pattern": re.compile(r"vimeo\.com/(\d+)"),
+        "embed": "https://player.vimeo.com/video/{video_id}",
+        "thumbnail": None,
+        "label": "Vimeo",
+    },
+    "dailymotion.com": {
+        "pattern": re.compile(r"dailymotion\.com/video/([a-zA-Z0-9]+)"),
+        "embed": "https://www.dailymotion.com/embed/video/{video_id}",
+        "thumbnail": None,
+        "label": "Dailymotion",
+    },
+}
+
+
+def _classify_resource(url: str) -> str:
+    """Classify a URL as 'video' or 'webpage' based on known video platform domains."""
+    lower = url.lower()
+    for domain in VIDEO_PLATFORMS:
+        if domain in lower:
+            return "video"
+    return "webpage"
+
+
+def _get_video_metadata(url: str) -> dict:
+    """Return embed_url and thumbnail_url for a known video URL (or empty dict)."""
+    lower = url.lower()
+    for domain, cfg in VIDEO_PLATFORMS.items():
+        if domain in lower:
+            m = cfg["pattern"].search(url)
+            if m:
+                video_id = m.group(1)
+                meta: dict = {"embed_url": cfg["embed"].format(video_id=video_id)}
+                if cfg["thumbnail"]:
+                    meta["thumbnail_url"] = cfg["thumbnail"].format(video_id=video_id)
+                return meta
+    return {}
+
+
+def _extract_metadata(html: str) -> dict:
+    """Extract og:title / title and og:image / twitter:image from HTML."""
+    soup = BeautifulSoup(html, "lxml")
+    title = None
+    thumbnail = None
+
+    og_title = soup.find("meta", property="og:title")
+    if og_title and og_title.get("content"):
+        title = og_title["content"].strip()
+
+    if not title:
+        title_tag = soup.find("title")
+        if title_tag:
+            title = title_tag.get_text(strip=True)
+
+    og_image = soup.find("meta", property="og:image")
+    if og_image and og_image.get("content"):
+        thumbnail = og_image["content"]
+
+    if not thumbnail:
+        tw_image = soup.find("meta", attrs={"name": "twitter:image"})
+        if tw_image and tw_image.get("content"):
+            thumbnail = tw_image["content"]
+
+    return {"title": title, "thumbnail_url": thumbnail}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _try_embed_friendly_url(url: str) -> str:
+    """Attempt to rewrite a URL to a mobile or embed-friendly version."""
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if host in EMBED_FRIENDLY_HOSTS:
+        new_host = EMBED_FRIENDLY_HOSTS[host]
+        return urlunparse(parsed._replace(netloc=new_host))
+
+    if host.startswith("www."):
+        mobile_host = "m." + host[4:]
+        return urlunparse(parsed._replace(netloc=mobile_host))
+
+    return url
+
+
+def _extract_readable_content(html: str, url: str) -> str:
+    """Extract main content from HTML using trafilatura with BeautifulSoup fallback."""
+    extracted = trafilatura.extract(
+        html,
+        output_format="html",
+        include_links=True,
+        include_images=False,
+        include_tables=False,
+        url=url,
+    )
+
+    if extracted and len(extracted.strip()) > 100:
+        return extracted
+
+    soup = BeautifulSoup(html, "lxml")
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript", "iframe"]):
+        tag.decompose()
+
+    main = soup.find("main") or soup.find("article") or soup.find(role="main") or soup.body
+    if main:
+        return str(main)
+
+    return "<p>No readable content extracted.</p>"
+
+
+# ---------------------------------------------------------------------------
+# Core search
+# ---------------------------------------------------------------------------
+async def _search_single(
+    source_id: int,
+    source_name: str,
+    url: str,
+    allow_embed: bool,
+    client: httpx.AsyncClient,
+) -> SearchResultItem:
+    """Search a single source. All exceptions are caught and returned as error results."""
+    resource_type = _classify_resource(url)
+
+    # ── Video path ────────────────────────────────────────────────────
+    if resource_type == "video":
+        video_meta = _get_video_metadata(url)
+        embed_url = video_meta.get("embed_url", url)
+        thumbnail_url = video_meta.get("thumbnail_url")
+        title = None
+
+        try:
+            resp = await client.get(
+                url,
+                timeout=REQUEST_TIMEOUT,
+                headers=_build_request_headers(url),
+            )
+            resp.raise_for_status()
+            html = _decode_response_bytes(resp.content, resp.headers.get("content-type", ""))
+            if not _is_unreadable(html):
+                meta = _extract_metadata(html)
+                title = meta.get("title")
+                if not thumbnail_url:
+                    thumbnail_url = meta.get("thumbnail_url")
+        except httpx.TimeoutException:
+            print(f"[SEARCH ERROR] Timeout fetching video meta '{source_name}' ({url})")
+        except httpx.HTTPStatusError as e:
+            print(f"[SEARCH ERROR] HTTP {e.response.status_code} fetching video meta '{source_name}' ({url})")
+        except Exception as e:
+            print(f"[SEARCH ERROR] {type(e).__name__}: {e} fetching video meta '{source_name}' ({url})")
+
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="video",
+            success=True,
+            url=embed_url,
+            original_url=url,
+            resource_type="video",
+            thumbnail_url=thumbnail_url,
+            title=title or source_name,
+            embed_url=embed_url,
+        )
+
+    # ── Embed path (non-video, allow_embed=True) ──────────────────────
+    if allow_embed:
+        embed_url = _try_embed_friendly_url(url)
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="embed",
+            success=True,
+            url=embed_url,
+            resource_type="webpage",
+        )
+
+    # ── Content path (non-video, allow_embed=False) ───────────────────
+    try:
+        html = await _fetch_html(client, url)
+    except httpx.TimeoutException:
+        print(f"[SEARCH ERROR] Timeout fetching '{source_name}' ({url})")
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="error",
+            success=False,
+            error="Request timed out",
+        )
+    except httpx.HTTPStatusError as e:
+        print(f"[SEARCH ERROR] HTTP {e.response.status_code} fetching '{source_name}' ({url})")
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="error",
+            success=False,
+            error=f"HTTP {e.response.status_code}",
+        )
+    except Exception as e:
+        print(f"[SEARCH ERROR] {type(e).__name__}: {e} fetching '{source_name}' ({url})")
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="error",
+            success=False,
+            error=str(e)[:200],
+        )
+
+    # ── Data cleaning: detect garbled / binary ────────────────────────
+    if _is_unreadable(html):
+        return SearchResultItem(
+            source_id=source_id,
+            source_name=source_name,
+            type="content",
+            success=True,
+            content=UNSUPPORTED_PREVIEW_MSG,
+            original_url=url,
+            resource_type="webpage",
+            title=source_name,
+        )
+
+    content = _extract_readable_content(html, url)
+    meta = _extract_metadata(html)
+
+    return SearchResultItem(
+        source_id=source_id,
+        source_name=source_name,
+        type="content",
+        success=True,
+        content=content,
+        original_url=url,
+        resource_type="webpage",
+        thumbnail_url=meta.get("thumbnail_url"),
+        title=meta.get("title"),
+    )
+
+
+async def search_all(
+    query: str,
+    sources: List[Tuple[int, str, str, bool]],
+) -> List[SearchResultItem]:
+    """Run concurrent searches across all sources. Single-source failures never crash the batch."""
+    async with httpx.AsyncClient(
+        headers=BROWSER_HEADERS,
+        follow_redirects=True,
+        timeout=httpx.Timeout(REQUEST_TIMEOUT),
+    ) as client:
+        tasks = [
+            _search_single(src_id, src_name, template.replace("{query}", query), allow_embed, client)
+            for src_id, src_name, template, allow_embed in sources
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    processed: List[SearchResultItem] = []
+    for i, result in enumerate(results):
+        if isinstance(result, SearchResultItem):
+            processed.append(result)
+        else:
+            processed.append(
+                SearchResultItem(
+                    source_id=sources[i][0],
+                    source_name=sources[i][1],
+                    type="error",
+                    success=False,
+                    error=str(result)[:200],
+                )
+            )
+
+    return processed

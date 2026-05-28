@@ -1,0 +1,167 @@
+const menuItems = [
+  {
+    group: [
+      { title: '余额', desc: '¥12,345.67', icon: '💰', iconBg: '#1677FF15', iconColor: '#1677FF' },
+      { title: '银行卡', desc: '3张', icon: '💳', iconBg: '#1677FF15', iconColor: '#1677FF' },
+      { title: '花呗', desc: '额度 ¥5,000', icon: '🌸', iconBg: '#FF6B3515', iconColor: '#FF6B35' },
+    ],
+  },
+  {
+    title: '支付宝会员',
+    items: [
+      { title: '会员中心', desc: '积分 1,280', icon: '⭐', iconBg: '#F5A62315', iconColor: '#F5A623' },
+      { title: '芝麻信用', desc: '信用极好', icon: '📊', iconBg: '#19C01915', iconColor: '#19C019' },
+    ],
+  },
+  {
+    items: [
+      { title: '账单', icon: '📋', iconBg: '#1677FF15', iconColor: '#1677FF' },
+      { title: '总资产', desc: '¥98,765.43', icon: '🏠', iconBg: '#1677FF15', iconColor: '#1677FF' },
+      { title: '余额宝', desc: '¥35,680.50', icon: '💰', iconBg: '#FF6B3515', iconColor: '#FF6B35' },
+      { title: '设置', icon: '⚙️', iconBg: '#99999915', iconColor: '#999999' },
+    ],
+  },
+]
+
+export default function ProfilePage({ onNavigate }) {
+  return (
+    <div className="min-h-screen bg-alipay-bg pb-20">
+      {/* Header */}
+      <div className="bg-alipay-blue px-4 pt-3 pb-8">
+        <div className="flex items-center justify-between">
+          <span className="text-white text-lg font-medium">我的</span>
+          <div className="flex items-center gap-4">
+            <button className="active:opacity-60">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+            </button>
+            <button className="active:opacity-60">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="12" cy="5" r="1" fill="white" stroke="none"/>
+                <circle cx="12" cy="12" r="1" fill="white" stroke="none"/>
+                <circle cx="12" cy="19" r="1" fill="white" stroke="none"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Avatar & name */}
+        <div className="flex items-center gap-3 mt-4">
+          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-2xl font-bold">
+            A
+          </div>
+          <div>
+            <div className="text-white text-lg font-medium">Alex</div>
+            <div className="text-white/60 text-xs mt-0.5">账号: 138****8888</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Top quick actions */}
+      <div className="bg-alipay-card rounded-card mx-4 -mt-4 relative z-10 px-4 py-4 shadow-sm">
+        <div className="flex justify-between">
+          {[
+            { label: '余额', value: '¥12,345.67', icon: '💰' },
+            { label: '银行卡', value: '3张', icon: '💳' },
+            { label: '花呗', value: '¥5,000', icon: '🌸' },
+          ].map((item, i) => (
+            <button
+              key={i}
+              onClick={() => item.label === '余额' && onNavigate && onNavigate('balance')}
+              className="flex flex-col items-center gap-1.5 active:opacity-60 flex-1"
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="text-xs text-alipay-text">{item.label}</span>
+              <span className="text-xs font-medium text-alipay-text">{item.value}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Menu groups */}
+      <div className="mx-4 mt-3 space-y-3">
+        {/* First group: balance, bank cards, huabei */}
+        <div className="bg-alipay-card rounded-card overflow-hidden">
+          {menuItems[0].group.map((item, i) => (
+            <button
+              key={i}
+              onClick={() => item.title === '余额' && onNavigate && onNavigate('balance')}
+              className="w-full px-4 py-3 flex items-center justify-between active:bg-gray-50 border-b border-alipay-divider last:border-b-0"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: item.iconBg, color: item.iconColor }}
+                >
+                  <span className="text-lg">{item.icon}</span>
+                </div>
+                <span className="text-sm text-alipay-text">{item.title}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-alipay-text-secondary">{item.desc}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Second group: member center, zhima credit */}
+        <div className="bg-alipay-card rounded-card overflow-hidden">
+          {menuItems[1].items.map((item, i) => (
+            <button
+              key={i}
+              className="w-full px-4 py-3 flex items-center justify-between active:bg-gray-50 border-b border-alipay-divider last:border-b-0"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: item.iconBg, color: item.iconColor }}
+                >
+                  <span className="text-lg">{item.icon}</span>
+                </div>
+                <div>
+                  <div className="text-sm text-alipay-text">{item.title}</div>
+                  {item.desc && <div className="text-xs text-alipay-text-tertiary mt-0.5">{item.desc}</div>}
+                </div>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+          ))}
+        </div>
+
+        {/* Third group */}
+        <div className="bg-alipay-card rounded-card overflow-hidden">
+          {menuItems[2].items.map((item, i) => (
+            <button
+              key={i}
+              onClick={() => item.title === '余额宝' && onNavigate && onNavigate('balance')}
+              className="w-full px-4 py-3 flex items-center justify-between active:bg-gray-50 border-b border-alipay-divider last:border-b-0"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: item.iconBg, color: item.iconColor }}
+                >
+                  <span className="text-lg">{item.icon}</span>
+                </div>
+                <span className="text-sm text-alipay-text">{item.title}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {item.desc && <span className="text-sm text-alipay-text-secondary">{item.desc}</span>}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

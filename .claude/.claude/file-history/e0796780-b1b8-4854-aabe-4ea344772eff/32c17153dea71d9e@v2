@@ -1,0 +1,127 @@
+import type { SearchResultItem } from "../types";
+import EmbedFrame from "./EmbedFrame";
+import VideoCard from "./VideoCard";
+
+interface Props {
+  results: SearchResultItem[];
+  query: string;
+}
+
+export default function ResultPanel({ results, query }: Props) {
+  if (results.length === 0) {
+    return <p className="text-gray-400 text-center py-8">未配置搜索源，请先在侧边栏添加。</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-4">
+        搜索 &quot;{query}&quot; — 共 {results.length} 个来源
+      </p>
+      <div className="results-grid">
+        {results.map((item, idx) => {
+          // ── Video card ────────────────────────────────────
+          if (item.type === "video") {
+            return (
+              <VideoCard
+                key={`video-${item.source_id}-${idx}`}
+                title={item.title || item.source_name}
+                thumbnailUrl={item.thumbnail_url}
+                embedUrl={item.embed_url || item.url || ""}
+                originalUrl={item.original_url || item.url || ""}
+                sourceName={item.source_name}
+              />
+            );
+          }
+
+          // ── Generic card (embed / content / error) ───────
+          return (
+            <div
+              key={`card-${item.source_id}-${idx}`}
+              className="result-card"
+            >
+              {/* Header */}
+              <div className="result-card-header">
+                <div className="flex items-center gap-2 min-w-0">
+                  {item.thumbnail_url && (
+                    <img
+                      src={item.thumbnail_url}
+                      alt=""
+                      className="w-6 h-6 rounded object-cover shrink-0"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  )}
+                  <span className="font-medium text-sm text-gray-700 truncate">
+                    {item.source_name}
+                  </span>
+                </div>
+                <span className={`result-card-badge ${badgeStyle(item.type)}`}>
+                  {badgeLabel(item.type)}
+                </span>
+              </div>
+
+              {/* Body */}
+              <div className="result-card-body">
+                {item.title && item.type === "content" && (
+                  <h3 className="text-base font-semibold text-gray-900 mb-2 leading-snug">
+                    {item.title}
+                  </h3>
+                )}
+
+                {item.type === "embed" && item.url && (
+                  <EmbedFrame
+                    url={item.url}
+                    sourceName={item.source_name}
+                    originalUrl={item.original_url}
+                  />
+                )}
+
+                {item.type === "content" && item.content && (
+                  <div
+                    className="result-content text-sm leading-relaxed text-gray-700"
+                    dangerouslySetInnerHTML={{ __html: item.content }}
+                  />
+                )}
+
+                {item.type === "error" && (
+                  <div className="p-4 text-sm text-red-500 bg-red-50 rounded-lg">
+                    <p className="font-medium">请求失败</p>
+                    <p className="text-xs mt-1 opacity-75">{item.error}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function badgeStyle(type: string): string {
+  switch (type) {
+    case "error":
+      return "badge-error";
+    case "content":
+      return "badge-content";
+    case "embed":
+      return "badge-embed";
+    default:
+      return "badge-default";
+  }
+}
+
+function badgeLabel(type: string): string {
+  switch (type) {
+    case "error":
+      return "错误";
+    case "content":
+      return "内容";
+    case "embed":
+      return "嵌入";
+    default:
+      return type;
+  }
+}

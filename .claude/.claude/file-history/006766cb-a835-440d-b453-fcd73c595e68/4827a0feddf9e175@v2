@@ -1,0 +1,85 @@
+import Header from '../components/Header'
+import BalanceCard from '../components/BalanceCard'
+import ServiceGrid from '../components/ServiceGrid'
+
+function NoticeCard() {
+  const notices = [
+    { title: '余额宝', desc: '七日年化 1.8750%', color: '#FF6B35', icon: '💰' },
+    { title: '花呗', desc: '本月账单待还 ¥0.00', color: '#1677FF', icon: '💳' },
+  ]
+
+  return (
+    <div className="mx-4 mt-3 space-y-3">
+      {notices.map((n, i) => (
+        <div
+          key={i}
+          className="bg-alipay-card rounded-card px-4 py-3 flex items-center justify-between active:opacity-60 cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
+              style={{ backgroundColor: `${n.color}15` }}
+            >
+              {n.icon}
+            </div>
+            <div>
+              <div className="text-sm font-medium text-alipay-text">{n.title}</div>
+              <div className="text-xs text-alipay-text-secondary mt-0.5">{n.desc}</div>
+            </div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      ))}
+
+      {/* Transaction entries */}
+      <div className="bg-alipay-card rounded-card overflow-hidden">
+        <div className="px-4 py-3 flex items-center justify-between border-b border-alipay-divider active:opacity-60 cursor-pointer">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1677FF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 4l4 4-4 4M21 8H3"/>
+              </svg>
+            </div>
+            <span className="text-sm text-alipay-text">转账记录</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+        <div className="px-4 py-3 flex items-center justify-between active:opacity-60 cursor-pointer">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF6B35" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
+            </div>
+            <span className="text-sm text-alipay-text">账单</span>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function HomePage({ onNavigate }) {
+  return (
+    <div className="min-h-screen bg-alipay-bg pb-20">
+      <div className="bg-gradient-to-b from-alipay-blue to-alipay-blue-dark">
+        <Header />
+        <BalanceCard onNavigate={onNavigate} />
+      </div>
+      <ServiceGrid />
+      <NoticeCard />
+      <div className="h-4" />
+      <p className="text-center text-alipay-text-tertiary text-xs pb-4">
+        长按余额区域进入开发者模式
+      </p>
+    </div>
+  )
+}

@@ -1,0 +1,61 @@
+import type { SearchResultItem } from "../types";
+import EmbedFrame from "./EmbedFrame";
+
+interface Props {
+  results: SearchResultItem[];
+  query: string;
+}
+
+export default function ResultPanel({ results, query }: Props) {
+  if (results.length === 0) {
+    return <p className="text-gray-400 text-center py-8">未配置搜索源，请先在侧边栏添加。</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-3">
+        搜索 &quot;{query}&quot; — 共 {results.length} 个来源
+      </p>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {results.map((item, idx) => (
+          <div
+            key={`${item.source_id}-${idx}`}
+            className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden flex flex-col"
+          >
+            {/* Header */}
+            <div className="px-4 py-2 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <span className="font-medium text-sm text-gray-700">{item.source_name}</span>
+              {item.type === "error" && (
+                <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded">错误</span>
+              )}
+              {item.type === "content" && (
+                <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded">内容</span>
+              )}
+              {item.type === "embed" && (
+                <span className="text-xs text-green-500 bg-green-50 px-2 py-0.5 rounded">嵌入</span>
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="flex-1">
+              {item.type === "embed" && item.url && (
+                <EmbedFrame url={item.url} sourceName={item.source_name} />
+              )}
+              {item.type === "content" && item.content && (
+                <div
+                  className="result-content p-4 text-sm leading-relaxed text-gray-800"
+                  dangerouslySetInnerHTML={{ __html: item.content }}
+                />
+              )}
+              {item.type === "error" && (
+                <div className="p-4 text-sm text-red-500">
+                  <p>{item.error}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

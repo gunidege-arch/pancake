@@ -1,0 +1,62 @@
+{
+  "numStartups": 4,
+  "tipsHistory": {
+    "new-user-warmup": 3
+  },
+  "firstStartTime": "2026-05-25T06:13:00.406Z",
+  "opusProMigrationComplete": true,
+  "sonnet1m45MigrationComplete": true,
+  "seenNotifications": {},
+  "migrationVersion": 13,
+  "userID": "3b2a36148883396616734dda625b7c956000e49ce30ec00376652fb9c53097e8",
+  "hasCompietedOnboarding": true,
+  "changelogLastFetched": 1779692590377,
+  "hasCompletedOnboarding": true,
+  "projects": {
+    "C:/WINDOWS/system32": {
+      "allowedTools": [],
+      "mcpContextUris": [],
+      "mcpServers": {},
+      "enabledMcpjsonServers": [],
+      "disabledMcpjsonServers": [],
+      "hasTrustDialogAccepted": true,
+      "projectOnboardingSeenCount": 1,
+      "hasClaudeMdExternalIncludesApproved": false,
+      "hasClaudeMdExternalIncludesWarningShown": false,
+      "lastGracefulShutdown": false,
+      "lastVersionBase": "2.1.150",
+      "lastCost": 0,
+      "lastAPIDuration": 0,
+      "lastAPIDurationWithoutRetries": 0,
+      "lastToolDuration": 0,
+      "lastDuration": 594425,
+      "lastLinesAdded": 0,
+      "lastLinesRemoved": 0,
+      "lastTotalInputTokens": 0,
+      "lastTotalOutputTokens": 0,
+      "lastTotalCacheCreationInputTokens": 0,
+      "lastTotalCacheReadInputTokens": 0,
+      "lastTotalWebSearchRequests": 0,
+      "lastFpsAverage": 0.11,
+      "lastFpsLow1Pct": 159.15,
+      "lastModelUsage": {},
+      "lastSessionId": "b68b2c9a-531e-4d8d-9518-86bcc581bf5b",
+      "lastSessionMetrics": {
+        "frame_duration_ms_count": 33,
+        "frame_duration_ms_min": 0.09830000001238659,
+        "frame_duration_ms_max": 6.283399999999972,
+        "frame_duration_ms_avg": 0.8858272727269095,
+        "frame_duration_ms_p50": 0.5459000000118976,
+        "frame_duration_ms_p95": 3.091779999982095,
+        "frame_duration_ms_p99": 5.934599999996523
+      }
+    }
+  },
+  "lastReleaseNotesSeen": "2.1.150",
+  "officialMarketplaceAutoInstallAttempted": true,
+  "officialMarketplaceAutoInstalled": false,
+  "officialMarketplaceAutoInstallFailReason": "unknown",
+  "officialMarketplaceAutoInstallRetryCount": 2,
+  "officialMarketplaceAutoInstallLastAttemptTime": 1779706057908,
+  "officialMarketplaceAutoInstallNextRetryTime": 1779720457908
+}

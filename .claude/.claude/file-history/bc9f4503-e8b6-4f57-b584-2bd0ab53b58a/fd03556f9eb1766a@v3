@@ -1,0 +1,161 @@
+import { useState } from 'react'
+
+export default function BalanceCard({ onNavigate }) {
+  const [balance, setBalance] = useState(() => {
+    return localStorage.getItem('alipay_balance') || '12,345.67'
+  })
+  const [visible, setVisible] = useState(true)
+  const [devMode, setDevMode] = useState(false)
+  const [editValue, setEditValue] = useState(balance)
+  let clickTimer = null
+
+  const handleBalanceClick = () => {
+    if (!clickTimer) {
+      clickTimer = setTimeout(() => {
+        setDevMode(true)
+        setEditValue(balance)
+        clickTimer = null
+      }, 1500)
+    }
+  }
+
+  const handleBalanceClickCancel = () => {
+    if (clickTimer) {
+      clearTimeout(clickTimer)
+      clickTimer = null
+    }
+  }
+
+  const handleSave = () => {
+    const val = editValue.replace(/[^\d.]/g, '')
+    if (val && !isNaN(val)) {
+      const formatted = Number(val).toLocaleString('zh-CN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+      setBalance(formatted)
+      localStorage.setItem('alipay_balance', formatted)
+    }
+    setDevMode(false)
+  }
+
+  return (
+    <div className="bg-gradient-to-b from-alipay-blue to-alipay-blue-dark px-4 pb-5 pt-2">
+      {/* Balance area */}
+      <div className="mt-2">
+        <div
+          className="flex items-center gap-2 text-white/80 text-sm cursor-pointer"
+          onClick={() => onNavigate && onNavigate('balance')}
+        >
+          <span>余额</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+        </div>
+
+        <div
+          className="mt-1 select-none"
+          onMouseDown={handleBalanceClick}
+          onMouseUp={handleBalanceClickCancel}
+          onMouseLeave={handleBalanceClickCancel}
+          onTouchStart={handleBalanceClick}
+          onTouchEnd={handleBalanceClickCancel}
+        >
+          {devMode ? (
+            <div className="flex items-center gap-2 mt-2" onClick={e => e.stopPropagation()}>
+              <span className="text-white text-lg">¥</span>
+              <input
+                autoFocus
+                type="text"
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                className="bg-white/20 text-white text-2xl font-bold px-3 py-1 rounded-btn outline-none w-40 border border-white/30"
+              />
+              <button
+                onClick={handleSave}
+                className="bg-white text-alipay-blue px-3 py-1 rounded-btn text-sm font-medium active:opacity-80"
+              >
+                确定
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="flex items-baseline gap-1">
+                <span className="text-white text-sm font-medium">¥</span>
+                <span className="text-white text-balance font-bold tracking-tight">
+                  {visible ? balance : '******'}
+                </span>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setVisible(!visible) }}
+                className="active:opacity-60 p-1"
+              >
+                {visible ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="3" stroke="white" strokeWidth="1.5"/>
+                    <path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8z" stroke="white" strokeWidth="1.5"/>
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M2 2l20 20M6.5 6.5A9.5 9.5 0 0112 4c6 0 10 8 10 8a12.6 12.6 0 01-3.5 4.8M9.5 4.5A9.8 9.8 0 0112 4M4.5 9.5A12.3 12.3 0 002 12s4 8 10 8a9.8 9.8 0 005-1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {devMode && (
+          <p className="text-white/50 text-xs mt-1">开发者模式 - 输入新金额后点击确定</p>
+        )}
+      </div>
+
+      {/* Quick action buttons */}
+      <div className="flex justify-between mt-5 px-2">
+        {[
+          { label: '转账', icon: 'transfer' },
+          { label: '充值', icon: 'topup' },
+          { label: '还款', icon: 'repay' },
+          { label: '缴费', icon: 'bill' },
+        ].map((action, i) => (
+          <button
+            key={i}
+            className="flex flex-col items-center gap-1 active:opacity-60 transition-opacity"
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <QuickIcon type={action.icon} />
+            </div>
+            <span className="text-white text-xs">{action.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QuickIcon({ type }) {
+  const icons = {
+    transfer: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 4l4 4-4 4M21 8H3M7 20l-4-4 4-4M3 16h18"/>
+      </svg>
+    ),
+    topup: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round">
+        <path d="M12 2v20M17 7H9.5A3.5 3.5 0 006 10.5v0A3.5 3.5 0 009.5 14H14a3 3 0 010 6h-7"/>
+      </svg>
+    ),
+    repay: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5">
+        <rect x="2" y="4" width="20" height="16" rx="3"/>
+        <path d="M2 10h20M6 16h4" strokeLinecap="round"/>
+      </svg>
+    ),
+    bill: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 6h16v16H4zM8 2v4M16 2v4M8 12h8M8 16h6"/>
+      </svg>
+    ),
+  }
+  return icons[type] || null
+}
