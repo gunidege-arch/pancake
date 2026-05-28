@@ -6,6 +6,7 @@ class SearchSourceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     search_url_template: str = Field(..., min_length=1, max_length=500)
     allow_embed: bool = False
+    device_id: str = Field(..., min_length=1, max_length=64)
 
 
 class SearchSourceUpdate(BaseModel):
@@ -19,6 +20,7 @@ class SearchSourceResponse(BaseModel):
     name: str
     search_url_template: str
     allow_embed: bool
+    is_builtin: bool = False
 
     model_config = {"from_attributes": True}
 

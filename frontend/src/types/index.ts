@@ -3,6 +3,7 @@ export interface SearchSource {
   name: string;
   search_url_template: string;
   allow_embed: boolean;
+  is_builtin: boolean;
 }
 
 export interface SearchResultItem {

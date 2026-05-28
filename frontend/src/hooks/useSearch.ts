@@ -4,6 +4,17 @@ import type { SearchResponse, SearchSource } from "../types";
 /* Always use relative /api — Vercel proxy rewrites handle production */
 const API_BASE = "/api";
 
+/* ── Device ID — persistent per-browser ── */
+function getDeviceId(): string {
+  const key = "pancake-device-id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 export function useSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResponse | null>(null);
@@ -37,7 +48,7 @@ export function useSources() {
   const fetchSources = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/sources/`);
+      const res = await fetch(`${API_BASE}/sources/?device_id=${encodeURIComponent(getDeviceId())}`);
       if (!res.ok) throw new Error("Failed to fetch sources");
       const data: SearchSource[] = await res.json();
       setSources(data);
@@ -51,7 +62,7 @@ export function useSources() {
       const res = await fetch(`${API_BASE}/sources/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, device_id: getDeviceId() }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Unknown error" }));
@@ -64,7 +75,7 @@ export function useSources() {
 
   const deleteSource = useCallback(
     async (id: number) => {
-      const res = await fetch(`${API_BASE}/sources/${id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/sources/${id}?device_id=${encodeURIComponent(getDeviceId())}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
       await fetchSources();
     },
