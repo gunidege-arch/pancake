@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, lazy, Suspense } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useSearch, useSources } from "./hooks/useSearch";
 import { useBookmarks } from "./hooks/useBookmarks";
 import SearchBar from "./components/SearchBar";
@@ -6,8 +6,7 @@ import SourceManager from "./components/SourceManager";
 import ResultPanel from "./components/ResultPanel";
 import BookmarksPanel from "./components/BookmarksPanel";
 import ToastContainer from "./components/Toast";
-
-const SplashScreen = lazy(() => import("./components/SplashScreen"));
+import SplashScreen from "./components/SplashScreen";
 
 import NavContent from "./components/NavContent";
 import BottomSheet from "./components/BottomSheet";
@@ -229,10 +228,9 @@ export default function App() {
 
   return (
     <>
-      <Suspense fallback={null}>
-        <SplashScreen onDismissed={() => setSplashDone(true)} />
-      </Suspense>
+      <SplashScreen onDismissed={() => setSplashDone(true)} />
       {/* ── Mobile view wrapper ──────────────────────────── */}
+      {splashDone && (
       <div
         style={
           settings.viewMode === "mobile"
@@ -409,6 +407,7 @@ export default function App() {
     </div>
     {/* close mobile wrapper */}
     </div>
+    )}
     <ToastContainer />
     </>
   );
