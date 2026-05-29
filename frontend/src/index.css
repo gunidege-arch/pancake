@@ -624,7 +624,6 @@ iframe { border: none; }
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -789,6 +788,44 @@ iframe { border: none; }
   opacity: .04;
   background-image: radial-gradient(circle, rgba(255,255,255,.8) 0.5px, transparent 0.5px);
   background-size: 3px 3px;
+}
+
+/* ── Action buttons (top-right) ── */
+.splash-actions {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 3;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.splash-btn {
+  padding: 0.35rem 1rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  color: rgba(255,255,255,0.25);
+  font-family: "Inter", "PingFang SC", system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  cursor: default;
+  transition: color 0.3s, border-color 0.3s, background 0.3s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.splash-btn--active {
+  color: rgba(255,255,255,0.65);
+  border-color: rgba(255,255,255,0.15);
+  cursor: pointer;
+}
+
+.splash-btn--active:hover {
+  color: rgba(255,255,255,0.9);
+  border-color: rgba(180,160,240,0.35);
+  background: rgba(180,160,240,0.08);
 }
 
 /* ── Content ── */

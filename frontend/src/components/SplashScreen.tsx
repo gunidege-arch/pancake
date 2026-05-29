@@ -82,8 +82,8 @@ export default function SplashScreen({ onDismissed }: Props) {
     cursorRef.current = { x: -999, y: -999, active: false };
   }, []);
 
-  /* ── Dismiss ── */
-  const handleClick = useCallback(() => {
+  /* ── Enter search ── */
+  const handleEnter = useCallback(() => {
     if (phase === "exit") return;
     setPhase("exit");
     setTimeout(() => { setRemoved(true); onDismissed(); }, 1600);
@@ -94,7 +94,6 @@ export default function SplashScreen({ onDismissed }: Props) {
   return (
     <div
       className={`splash-linear ${phase}`}
-      onClick={handleClick}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
     >
@@ -115,6 +114,18 @@ export default function SplashScreen({ onDismissed }: Props) {
 
       <div className="splash-noise" />
 
+      <div className="splash-actions">
+        <button className="splash-btn splash-btn--active" onClick={handleEnter}>
+          搜索
+        </button>
+        <button className="splash-btn">
+          音乐
+        </button>
+        <button className="splash-btn">
+          壁纸
+        </button>
+      </div>
+
       <div className="splash-content">
         <span className="splash-label">AGGREGATED SEARCH</span>
         <h1 className="splash-title-linear">
@@ -130,7 +141,6 @@ export default function SplashScreen({ onDismissed }: Props) {
           <div className="splash-divider-line" />
           <div className="splash-divider-dot" />
         </div>
-        <p className="splash-hint-linear">轻触任意位置进入</p>
       </div>
 
       <div className="splash-status">
