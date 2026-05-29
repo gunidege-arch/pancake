@@ -1,0 +1,6 @@
+{
+  "playwright": {
+    "command": "node",
+    "args": ["C:/Users/ASUS/AppData/Roaming/npm/node_modules/@playwright/mcp/cli.js"]
+  }
+}

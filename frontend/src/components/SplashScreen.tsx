@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate } from "react-router-dom";
 
 type Mode = "search" | "music" | "wallpaper";
@@ -102,7 +103,16 @@ export default function SplashScreen() {
     if (!displayMode || phase === "exit") return;
     const path = `/${displayMode}`;
     setPhase("exit");
-    setTimeout(() => { setRemoved(true); navigate(path); }, 1600);
+    setTimeout(() => {
+      setRemoved(true);
+      if (document.startViewTransition) {
+        document.startViewTransition(() => {
+          flushSync(() => { navigate(path); });
+        });
+      } else {
+        navigate(path);
+      }
+    }, 1600);
   }, [displayMode, phase, navigate]);
 
   if (removed) return null;

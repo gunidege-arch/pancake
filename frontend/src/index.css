@@ -1136,3 +1136,48 @@ iframe { border: none; }
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   VIEW TRANSITIONS API — focus-pull crossfade
+   ═══════════════════════════════════════════════════════════ */
+::view-transition-old(root) {
+  animation: vt-exit 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+::view-transition-new(root) {
+  animation: vt-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes vt-exit {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    filter: blur(12px);
+    transform: scale(0.97);
+  }
+}
+
+@keyframes vt-enter {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+  ::view-transition-old(root) { opacity: 0; }
+  ::view-transition-new(root) { opacity: 1; }
+}
