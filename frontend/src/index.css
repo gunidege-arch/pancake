@@ -1107,34 +1107,6 @@ iframe { border: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   SPLASH MODE TRANSITION — SVG stroke overlay
-   ═══════════════════════════════════════════════════════════ */
-.splash-transition-svg {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 50;
-  pointer-events: none;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   PAGE TRANSITION — hand-drawn SVG stroke
-   ═══════════════════════════════════════════════════════════ */
-.page-transition-svg {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 9999;
-  pointer-events: none;
-  opacity: 0;
-}
-.page-transition-svg.active {
-  opacity: 1;
-}
-
-/* ═══════════════════════════════════════════════════════════
    PAGES
    ═══════════════════════════════════════════════════════════ */
 .page-placeholder {
