@@ -32,9 +32,10 @@ export default function SplashScreen() {
   const frameRef = useRef(0);
 
   /* ── SVG transition refs ── */
-  const transSvgRef = useRef<SVGSVGElement>(null);
   const path1Ref = useRef<SVGPathElement>(null);
   const path2Ref = useRef<SVGPathElement>(null);
+  const path3Ref = useRef<SVGPathElement>(null);
+  const path4Ref = useRef<SVGPathElement>(null);
   const fillRef = useRef<SVGRectElement>(null);
 
   /* ── Staggered entrance ── */
@@ -106,10 +107,9 @@ export default function SplashScreen() {
 
   /* ── Mode transition animation ── */
   const animateModeSwitch = useCallback((nextMode: Mode) => {
-    const path1 = path1Ref.current;
-    const path2 = path2Ref.current;
+    const paths = [path1Ref.current, path2Ref.current, path3Ref.current, path4Ref.current].filter(Boolean) as SVGPathElement[];
     const fill = fillRef.current;
-    if (!path1 || !path2 || !fill) {
+    if (paths.length === 0 || !fill) {
       setDisplayMode(nextMode);
       setMode(nextMode);
       return;
@@ -117,29 +117,24 @@ export default function SplashScreen() {
 
     setTransitioning(true);
 
-    const len1 = path1.getTotalLength();
-    const len2 = path2.getTotalLength();
+    const len = paths[0].getTotalLength();
 
-    gsap.set([path1, path2], { strokeDasharray: len1, strokeDashoffset: len1, opacity: 1 });
+    gsap.set(paths, { strokeDasharray: len, strokeDashoffset: len, opacity: 1 });
     gsap.set(fill, { opacity: 0 });
 
     const tl = gsap.timeline();
 
-    // Phase 1: draw strokes on
-    tl.to(path1, {
+    // Phase 1: draw all strokes on, staggered
+    tl.to(paths, {
       strokeDashoffset: 0,
-      duration: 0.45,
+      duration: 0.5,
       ease: "power2.inOut",
+      stagger: 0.08,
     })
-    .to(path2, {
-      strokeDashoffset: 0,
-      duration: 0.35,
-      ease: "power2.inOut",
-    }, "-=0.3")
     // Phase 2: fill to solid
     .to(fill, {
       opacity: 1,
-      duration: 0.25,
+      duration: 0.2,
       ease: "power2.in",
     })
     // Phase 3: switch content
@@ -150,17 +145,17 @@ export default function SplashScreen() {
     // Phase 4: wipe away
     .to(fill, {
       opacity: 0,
-      duration: 0.12,
+      duration: 0.1,
       ease: "power2.out",
     })
-    .to([path1, path2], {
-      strokeDashoffset: -len1,
-      duration: 0.5,
+    .to(paths, {
+      strokeDashoffset: -len,
+      duration: 0.55,
       ease: "power3.in",
       stagger: 0.05,
     })
     .call(() => {
-      gsap.set([path1, path2], { opacity: 0, strokeDashoffset: len1 });
+      gsap.set(paths, { opacity: 0, strokeDashoffset: len });
       setTransitioning(false);
     });
   }, []);
@@ -200,34 +195,48 @@ export default function SplashScreen() {
     >
       {/* ── SVG mode transition overlay ── */}
       <svg
-        ref={transSvgRef}
         className="splash-transition-svg"
         viewBox="0 0 1440 900"
         preserveAspectRatio="none"
       >
         <defs>
-          <linearGradient id="splashStroke1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="sG1" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#8b5cf6" />
-            <stop offset="50%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#3b82f6" />
+            <stop offset="100%" stopColor="#6366f1" />
           </linearGradient>
-          <linearGradient id="splashStroke2" x1="100%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id="sG2" x1="100%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#a78bfa" />
-            <stop offset="50%" stopColor="#818cf8" />
-            <stop offset="100%" stopColor="#60a5fa" />
+            <stop offset="100%" stopColor="#818cf8" />
+          </linearGradient>
+          <linearGradient id="sG3" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#7c3aed" />
+            <stop offset="100%" stopColor="#4f46e5" />
+          </linearGradient>
+          <linearGradient id="sG4" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="#6d28d9" />
+            <stop offset="100%" stopColor="#4338ca" />
           </linearGradient>
         </defs>
-        <rect ref={fillRef} x="0" y="0" width="1440" height="900" fill="#050508" opacity="0" />
-        <path
-          ref={path1Ref}
-          d="M -50,200 C 180,80 320,320 500,280 C 720,230 680,450 850,480 C 1020,510 1100,300 1280,380 C 1380,420 1480,500 1520,550"
-          fill="none" stroke="url(#splashStroke1)" strokeWidth="120" strokeLinecap="round" opacity="0"
-        />
-        <path
-          ref={path2Ref}
-          d="M -30,750 C 200,820 350,600 550,640 C 780,685 720,380 900,350 C 1060,320 1180,500 1350,420 C 1420,390 1490,300 1530,250"
-          fill="none" stroke="url(#splashStroke2)" strokeWidth="100" strokeLinecap="round" opacity="0"
-        />
+
+        {/* Background fill — ensures complete coverage */}
+        <rect ref={fillRef} x="0" y="0" width="1440" height="900" fill="#0a0a14" opacity="0" />
+
+        {/* Stroke 1 — top-left to bottom-right, thick sweep */}
+        <path ref={path1Ref}
+          d="M -200,-50 C 100,-20 250,200 400,150 C 600,80 550,350 750,400 C 950,450 1000,250 1200,350 C 1350,420 1500,550 1650,600"
+          fill="none" stroke="url(#sG1)" strokeWidth="280" strokeLinecap="round" opacity="0" />
+        {/* Stroke 2 — bottom-left to top-right */}
+        <path ref={path2Ref}
+          d="M -200,950 C 150,880 300,650 500,680 C 700,710 650,400 850,350 C 1050,300 1150,550 1350,450 C 1450,390 1550,200 1650,100"
+          fill="none" stroke="url(#sG2)" strokeWidth="280" strokeLinecap="round" opacity="0" />
+        {/* Stroke 3 — left to right across middle */}
+        <path ref={path3Ref}
+          d="M -200,350 C 80,320 250,480 450,430 C 650,380 700,520 900,480 C 1100,440 1200,300 1400,350 C 1480,370 1580,430 1650,450"
+          fill="none" stroke="url(#sG3)" strokeWidth="260" strokeLinecap="round" opacity="0" />
+        {/* Stroke 4 — right to left, vertical-ish */}
+        <path ref={path4Ref}
+          d="M 1650,-50 C 1400,50 1350,250 1200,300 C 1000,370 1050,550 850,520 C 650,490 550,650 350,620 C 200,600 80,700 -200,750"
+          fill="none" stroke="url(#sG4)" strokeWidth="260" strokeLinecap="round" opacity="0" />
       </svg>
 
       <div className="splash-grid" />
