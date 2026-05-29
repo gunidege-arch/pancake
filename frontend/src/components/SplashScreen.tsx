@@ -1,12 +1,27 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-/* ── LINEAR × VERCEL INSPIRED SPLASH ────────────────────────
-   Geometric grid · prismatic flow · dot matrix · edge beams */
+type Mode = "search" | "music" | "wallpaper";
+
+const MODE_CONFIG: Record<Mode, { title: string[]; hint: string }> = {
+  search: {
+    title: ["别", "问", "了", "自", "己", "搜"],
+    hint: "轻触任意位置进入",
+  },
+  music: {
+    title: ["静", "下", "来", "听", "一", "首"],
+    hint: "轻触任意位置进入",
+  },
+  wallpaper: {
+    title: ["换", "一", "张", "看", "世", "界"],
+    hint: "轻触任意位置进入",
+  },
+};
 
 export default function SplashScreen() {
   const navigate = useNavigate();
   const [phase, setPhase] = useState<"enter" | "idle" | "exit">("enter");
+  const [mode, setMode] = useState<Mode | null>(null);
   const [removed, setRemoved] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef({ x: -999, y: -999, active: false });
@@ -80,18 +95,29 @@ export default function SplashScreen() {
     cursorRef.current = { x: -999, y: -999, active: false };
   }, []);
 
-  /* ── Enter target page ── */
-  const handleEnter = useCallback((path: string) => {
+  /* ── Mode select ── */
+  const handleSelectMode = useCallback((m: Mode) => {
     if (phase === "exit") return;
+    setMode((prev) => (prev === m ? prev : m));
+  }, [phase]);
+
+  /* ── Enter page ── */
+  const handleEnter = useCallback(() => {
+    if (!mode || phase === "exit") return;
+    const path = `/${mode}`;
     setPhase("exit");
     setTimeout(() => { setRemoved(true); navigate(path); }, 1600);
-  }, [phase, navigate]);
+  }, [mode, phase, navigate]);
 
   if (removed) return null;
 
+  const config = mode ? MODE_CONFIG[mode] : null;
+  const showHint = mode !== null && phase === "idle";
+
   return (
     <div
-      className={`splash-linear ${phase}`}
+      className={`splash-linear ${phase} ${mode ? `splash-mode--${mode}` : ""}`}
+      onClick={handleEnter}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
     >
@@ -113,13 +139,22 @@ export default function SplashScreen() {
       <div className="splash-noise" />
 
       <div className="splash-actions">
-        <button className="splash-btn splash-btn--active" onClick={() => handleEnter("/search")}>
+        <button
+          className={`splash-btn ${mode === "search" ? "splash-btn--active" : ""}`}
+          onClick={(e) => { e.stopPropagation(); handleSelectMode("search"); }}
+        >
           搜索
         </button>
-        <button className="splash-btn" onClick={() => handleEnter("/music")}>
+        <button
+          className={`splash-btn ${mode === "music" ? "splash-btn--active" : ""}`}
+          onClick={(e) => { e.stopPropagation(); handleSelectMode("music"); }}
+        >
           音乐
         </button>
-        <button className="splash-btn" onClick={() => handleEnter("/wallpaper")}>
+        <button
+          className={`splash-btn ${mode === "wallpaper" ? "splash-btn--active" : ""}`}
+          onClick={(e) => { e.stopPropagation(); handleSelectMode("wallpaper"); }}
+        >
           壁纸
         </button>
       </div>
@@ -127,18 +162,24 @@ export default function SplashScreen() {
       <div className="splash-content">
         <span className="splash-label">AGGREGATED SEARCH</span>
         <h1 className="splash-title-linear">
-          <span className="splash-title-char" style={{ transitionDelay: "0s" }}>别</span>
-          <span className="splash-title-char" style={{ transitionDelay: "0.06s" }}>问</span>
-          <span className="splash-title-char" style={{ transitionDelay: "0.12s" }}>了</span>
-          <span className="splash-title-char" style={{ transitionDelay: "0.18s" }}>自</span>
-          <span className="splash-title-char" style={{ transitionDelay: "0.24s" }}>己</span>
-          <span className="splash-title-char" style={{ transitionDelay: "0.3s" }}>搜</span>
+          {(config?.title ?? MODE_CONFIG.search.title).map((char, i) => (
+            <span
+              key={`${char}-${i}`}
+              className="splash-title-char"
+              style={{ transitionDelay: `${i * 0.06}s` }}
+            >
+              {char}
+            </span>
+          ))}
         </h1>
         <div className="splash-divider">
           <div className="splash-divider-dot" />
           <div className="splash-divider-line" />
           <div className="splash-divider-dot" />
         </div>
+        {showHint && config && (
+          <p className="splash-hint-linear">{config.hint}</p>
+        )}
       </div>
 
       <div className="splash-status">

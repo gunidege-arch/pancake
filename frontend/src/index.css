@@ -828,6 +828,13 @@ iframe { border: none; }
   background: rgba(180,160,240,0.08);
 }
 
+/* Mode-specific cursor */
+.splash-mode--search,
+.splash-mode--music,
+.splash-mode--wallpaper {
+  cursor: pointer;
+}
+
 /* ── Content ── */
 .splash-content {
   position: relative;
@@ -1116,99 +1123,8 @@ iframe { border: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   APP LAYOUT — topbar, nav, main area
-   ═══════════════════════════════════════════════════════════ */
-.app-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow-y: auto;
-}
-
-.app-topbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem 1rem;
-  padding-top: calc(2.5rem + env(safe-area-inset-top, 0px));
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-}
-
-.app-topbar-menu {
-  width: 36px; height: 36px; min-width: 36px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-.app-topbar-menu:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.app-nav {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.app-nav-link {
-  padding: 0.3rem 0.85rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: rgba(255,255,255,0.35);
-  text-decoration: none;
-  transition: color 0.2s, background 0.2s;
-}
-.app-nav-link:hover {
-  color: rgba(255,255,255,0.7);
-  background: rgba(255,255,255,0.04);
-}
-.app-nav-link[aria-current="page"],
-.app-nav-link.active {
-  color: rgba(255,255,255,0.85);
-  background: rgba(180,160,240,0.1);
-}
-
-/* ═══════════════════════════════════════════════════════════
    PAGES
    ═══════════════════════════════════════════════════════════ */
-.page {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.search-bar-area {
-  padding: 0.5rem 1rem 0;
-  display: flex;
-  justify-content: center;
-}
-.search-bar-area > * {
-  width: 100%;
-  max-width: 500px;
-}
-
-.results-area {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.5rem 1rem 2rem;
-}
-
-.page-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
 .page-placeholder {
   flex: 1;
   display: flex;
