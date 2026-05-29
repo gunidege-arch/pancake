@@ -1,13 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 /* ── LINEAR × VERCEL INSPIRED SPLASH ────────────────────────
    Geometric grid · prismatic flow · dot matrix · edge beams */
 
-interface Props {
-  onDismissed: () => void;
-}
-
-export default function SplashScreen({ onDismissed }: Props) {
+export default function SplashScreen() {
+  const navigate = useNavigate();
   const [phase, setPhase] = useState<"enter" | "idle" | "exit">("enter");
   const [removed, setRemoved] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,12 +80,12 @@ export default function SplashScreen({ onDismissed }: Props) {
     cursorRef.current = { x: -999, y: -999, active: false };
   }, []);
 
-  /* ── Enter search ── */
-  const handleEnter = useCallback(() => {
+  /* ── Enter target page ── */
+  const handleEnter = useCallback((path: string) => {
     if (phase === "exit") return;
     setPhase("exit");
-    setTimeout(() => { setRemoved(true); onDismissed(); }, 1600);
-  }, [phase, onDismissed]);
+    setTimeout(() => { setRemoved(true); navigate(path); }, 1600);
+  }, [phase, navigate]);
 
   if (removed) return null;
 
@@ -115,13 +113,13 @@ export default function SplashScreen({ onDismissed }: Props) {
       <div className="splash-noise" />
 
       <div className="splash-actions">
-        <button className="splash-btn splash-btn--active" onClick={handleEnter}>
+        <button className="splash-btn splash-btn--active" onClick={() => handleEnter("/search")}>
           搜索
         </button>
-        <button className="splash-btn">
+        <button className="splash-btn" onClick={() => handleEnter("/music")}>
           音乐
         </button>
-        <button className="splash-btn">
+        <button className="splash-btn" onClick={() => handleEnter("/wallpaper")}>
           壁纸
         </button>
       </div>
