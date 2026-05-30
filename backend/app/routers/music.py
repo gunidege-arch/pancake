@@ -124,24 +124,50 @@ async def play_music(id: str = Query(..., min_length=1)):
     server = parts[0] if len(parts) == 2 else "netease"
     song_id = parts[1] if len(parts) == 2 else parts[0]
 
-    if server in ("netease", "kugou"):
+    if server == "netease":
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                # Get fresh proxy URL via type=song (includes auth)
                 resp = await client.get(METING_API, params={
-                    "server": server,
+                    "server": "netease",
+                    "type": "song",
+                    "id": song_id,
+                })
+                data = resp.json()
+                proxy_url = data[0].get("url", "") if isinstance(data, list) and data else ""
+                if not proxy_url:
+                    return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+                # Follow proxy redirect to get final audio URL
+                resp2 = await client.get(proxy_url)
+                return {"url": str(resp2.url), "br": 0}
+        except Exception:
+            return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+
+    if server == "kugou":
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                # type=song may fail, try type=url with auth extracted from song lookup
+                resp = await client.get(METING_API, params={
+                    "server": "kugou",
+                    "type": "song",
+                    "id": song_id,
+                })
+                if resp.status_code == 200:
+                    data = resp.json()
+                    proxy_url = data[0].get("url", "") if isinstance(data, list) and data else ""
+                    if proxy_url:
+                        resp2 = await client.get(proxy_url)
+                        if resp2.status_code == 200:
+                            return {"url": str(resp2.url), "br": 0}
+                # Fallback: try direct type=url (may return 401)
+                resp3 = await client.get(METING_API, params={
+                    "server": "kugou",
                     "type": "url",
                     "id": song_id,
                 })
-                if resp.status_code != 200:
-                    return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
-                # Elysium returns 302 redirect or JSON with url field
-                ct = resp.headers.get("content-type", "")
-                if "json" in ct:
-                    data = resp.json()
-                    url = data.get("url", "") if isinstance(data, dict) else ""
-                    return {"url": url, "br": 0}
-                else:
-                    return {"url": str(resp.url), "br": 0}
+                if resp3.status_code == 200:
+                    return {"url": str(resp3.url), "br": 0}
+                return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
         except Exception:
             return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
 
