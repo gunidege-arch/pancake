@@ -2,13 +2,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 
 const API_BASE = "/api";
 
-export interface MusicSource {
-  id: number;
-  name: string;
-  api_url_template: string;
-  is_builtin: boolean;
-}
-
 export interface MusicTrack {
   id: string;
   title: string;
@@ -20,18 +13,7 @@ export interface MusicTrack {
   source_name: string;
 }
 
-function getDeviceId(): string {
-  const key = "pancake-device-id";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    localStorage.setItem(key, id);
-  }
-  return id;
-}
-
 export function useMusic() {
-  const [sources, setSources] = useState<MusicSource[]>([]);
   const [query, setQuery] = useState("");
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,6 +28,7 @@ export function useMusic() {
     const v = localStorage.getItem("pancake-volume");
     return v ? parseFloat(v) : 0.7;
   });
+  const [resolvingUrl, setResolvingUrl] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -80,36 +63,6 @@ export function useMusic() {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
-  /* ── Sources ──────────────────────────── */
-
-  const fetchSources = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/music/sources?device_id=${encodeURIComponent(getDeviceId())}`);
-      if (res.ok) setSources(await res.json());
-    } catch { /* offline */ }
-  }, []);
-
-  const addSource = useCallback(async (name: string, apiUrl: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/music/sources`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, api_url_template: apiUrl, device_id: getDeviceId() }),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setSources((prev) => [...prev, created]);
-      }
-    } catch { /* */ }
-  }, []);
-
-  const deleteSource = useCallback(async (id: number) => {
-    try {
-      await fetch(`${API_BASE}/music/sources/${id}?device_id=${encodeURIComponent(getDeviceId())}`, { method: "DELETE" });
-      setSources((prev) => prev.filter((s) => s.id !== id));
-    } catch { /* */ }
-  }, []);
-
   /* ── Search ───────────────────────────── */
 
   const search = useCallback(async (q: string) => {
@@ -118,7 +71,7 @@ export function useMusic() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE}/music/search?q=${encodeURIComponent(q)}&device_id=${encodeURIComponent(getDeviceId())}`);
+      const res = await fetch(`${API_BASE}/music/search?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const data = await res.json();
         setTracks(data.tracks || []);
@@ -135,13 +88,39 @@ export function useMusic() {
 
   /* ── Playback ─────────────────────────── */
 
-  const play = useCallback((track: MusicTrack) => {
+  const play = useCallback(async (track: MusicTrack) => {
     const audio = audioRef.current;
     if (!audio) return;
+
     setCurrentTrack(track);
-    audio.src = track.audio_url;
-    audio.load();
-    audio.play().catch(() => { /* autoplay blocked */ });
+
+    if (track.audio_url) {
+      audio.src = track.audio_url;
+      audio.load();
+      audio.play().catch(() => {});
+      return;
+    }
+
+    // Resolve play URL on demand
+    setResolvingUrl(true);
+    try {
+      const res = await fetch(`${API_BASE}/music/play?id=${encodeURIComponent(track.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          track.audio_url = data.url;
+          audio.src = data.url;
+          audio.load();
+          audio.play().catch(() => {});
+        } else {
+          setError("获取播放地址失败");
+        }
+      }
+    } catch {
+      setError("网络错误");
+    } finally {
+      setResolvingUrl(false);
+    }
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -174,9 +153,8 @@ export function useMusic() {
   }, [currentTrack, tracks, play]);
 
   return {
-    sources, fetchSources, addSource, deleteSource,
     query, tracks, loading, error, search,
-    currentTrack, isPlaying, currentTime, duration, volume,
+    currentTrack, isPlaying, currentTime, duration, volume, resolvingUrl,
     play, togglePlay, seek, setVolume: setVolumePersist, playNext, playPrev,
   };
 }

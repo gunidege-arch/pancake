@@ -1,90 +1,101 @@
+import asyncio
 from typing import List
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 import httpx
 
-from ..database import get_db
-from ..models import MusicSource
-from ..schemas import MusicSourceCreate, MusicSourceResponse, MusicTrack, MusicSearchResponse
+from ..schemas import MusicTrack, MusicSearchResponse
 
 router = APIRouter(prefix="/api/music", tags=["music"])
 
+METING_API = "https://api.injahow.cn/meting/"
 
-# ── Sources CRUD ────────────────────────────────────
-
-@router.get("/sources", response_model=List[MusicSourceResponse])
-async def list_sources(device_id: str = Query(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(MusicSource).where(
-            (MusicSource.device_id == device_id) | (MusicSource.is_builtin == True)
-        )
-    )
-    return result.scalars().all()
+SERVERS = [
+    {"id": "netease", "name": "网易云"},
+    {"id": "tencent", "name": "QQ音乐"},
+    {"id": "kugou", "name": "酷狗"},
+]
 
 
-@router.post("/sources", response_model=MusicSourceResponse, status_code=201)
-async def create_source(body: MusicSourceCreate, db: AsyncSession = Depends(get_db)):
-    source = MusicSource(
-        name=body.name,
-        api_url_template=body.api_url_template,
-        device_id=body.device_id,
-    )
-    db.add(source)
-    await db.commit()
-    await db.refresh(source)
-    return source
+def _build_cover(server: str, pic_id: str) -> str:
+    """Build cover URL from Meting API pic_id."""
+    if not pic_id:
+        return ""
+    if server == "netease":
+        return f"https://p2.music.126.net/{pic_id}/{pic_id}.jpg"
+    if server == "tencent":
+        return f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{pic_id}.jpg"
+    if server == "kugou" and pic_id:
+        return pic_id if pic_id.startswith("http") else f"https://imge.kugou.com/{pic_id}"
+    return ""
 
-
-@router.delete("/sources/{source_id}", status_code=204)
-async def delete_source(source_id: int, device_id: str = Query(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(MusicSource).where(MusicSource.id == source_id))
-    source = result.scalar_one_or_none()
-    if source and not source.is_builtin and source.device_id == device_id:
-        await db.delete(source)
-        await db.commit()
-
-
-# ── Search ──────────────────────────────────────────
 
 @router.get("/search", response_model=MusicSearchResponse)
-async def search_music(
-    q: str = Query(..., min_length=1),
-    device_id: str = Query(...),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(MusicSource).where(
-            (MusicSource.device_id == device_id) | (MusicSource.is_builtin == True)
-        )
-    )
-    sources = result.scalars().all()
-
+async def search_music(q: str = Query(..., min_length=1)):
     tracks: List[MusicTrack] = []
 
-    async with httpx.AsyncClient(timeout=12.0) as client:
-        for src in sources:
-            try:
-                url = src.api_url_template.replace("{keyword}", q)
-                resp = await client.get(url)
+    async def search_server(svr: dict):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(METING_API, params={
+                    "server": svr["id"],
+                    "type": "search",
+                    "id": q,
+                    "page": 1,
+                    "limit": 20,
+                })
                 resp.raise_for_status()
                 data = resp.json()
-
-                # Support standard LX Music API format: { list: [{ id, title, artist, ... }] }
-                items = data if isinstance(data, list) else data.get("list", data.get("results", data.get("tracks", [])))
-                for item in items:
-                    if isinstance(item, dict):
+                if isinstance(data, list):
+                    for item in data:
+                        if not isinstance(item, dict):
+                            continue
+                        sid = str(item.get("id", item.get("song_id", item.get("songid", ""))))
+                        if not sid:
+                            continue
                         tracks.append(MusicTrack(
-                            id=str(item.get("id", item.get("song_id", ""))),
-                            title=item.get("title", item.get("name", item.get("songname", "Unknown"))),
-                            artist=item.get("artist", item.get("singer", item.get("author", ""))),
-                            album=item.get("album", item.get("albumname")),
-                            cover_url=item.get("cover", item.get("img", item.get("pic_url"))),
-                            audio_url=item.get("url", item.get("audio_url", item.get("music_url", ""))),
+                            id=f"{svr['id']}:{sid}",
+                            title=item.get("name", item.get("title", item.get("songname", "Unknown"))),
+                            artist="、".join(item.get("artist", item.get("artists", []))) if isinstance(item.get("artist"), list) else item.get("artist", item.get("singer", item.get("author", ""))),
+                            album=item.get("album", item.get("albumname", item.get("album_name"))),
+                            cover_url=_build_cover(svr["id"], item.get("pic_id", item.get("picid", ""))) or item.get("pic", item.get("cover", "")),
+                            audio_url="",  # resolved on-demand via /play
                             duration=item.get("duration", item.get("interval")),
-                            source_name=src.name,
+                            source_name=svr["name"],
                         ))
-            except Exception:
-                continue
+        except Exception:
+            pass
 
-    return MusicSearchResponse(query=q, tracks=tracks)
+    await asyncio.gather(*(search_server(s) for s in SERVERS))
+
+    # Dedup by id
+    seen = set()
+    unique = []
+    for t in tracks:
+        if t.id not in seen:
+            seen.add(t.id)
+            unique.append(t)
+
+    return MusicSearchResponse(query=q, tracks=unique)
+
+
+@router.get("/play")
+async def play_music(id: str = Query(..., min_length=1)):
+    """Resolve playable audio URL for a track."""
+    parts = id.split(":", 1)
+    server = parts[0] if len(parts) == 2 else "netease"
+    song_id = parts[1] if len(parts) == 2 else parts[0]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(METING_API, params={
+                "server": server,
+                "type": "url",
+                "id": song_id,
+            })
+            resp.raise_for_status()
+            data = resp.json()
+            url = data.get("url", "") if isinstance(data, dict) else ""
+            return {"url": url, "br": data.get("br", 0) if isinstance(data, dict) else 0}
+    except Exception:
+        return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
