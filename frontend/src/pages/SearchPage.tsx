@@ -270,6 +270,13 @@ export default function SearchPage() {
             </div>
           </div>
 
+          {/* Loading state */}
+          {loading && (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <SearchLottie />
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div style={{ padding: "0 1rem 0.5rem", textAlign: "center" }}>
@@ -294,7 +301,7 @@ export default function SearchPage() {
           {!results && !loading && !error && (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ textAlign: "center" }}>
-                <SearchLottie />
+                <div style={{ fontSize: "3rem", marginBottom: "0.75rem", opacity: 0.6 }}>&#128270;</div>
                 <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0 }}>输入关键词，别问了自己搜</p>
                 <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: "0.25rem", opacity: 0.6 }}>
                   支持视频识别、内容提取、嵌入式预览

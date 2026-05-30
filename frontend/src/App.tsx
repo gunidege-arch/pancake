@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SplashScreen from "./components/SplashScreen";
 import PageTransition from "./components/PageTransition";
 import SearchPage from "./pages/SearchPage";
@@ -11,7 +11,8 @@ export default function App() {
     <>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<SplashScreen />} />
+          <Route path="/" element={<Navigate to="/search" replace />} />
+          <Route path="/splash" element={<SplashScreen />} />
           <Route element={<PageTransition />}>
             <Route path="/search" element={<SearchPage />} />
             <Route path="/music" element={<MusicPage />} />
