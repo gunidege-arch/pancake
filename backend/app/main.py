@@ -1,9 +1,11 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from .database import init_db
 from .routers import sources, search, music
+import httpx
 
 
 @asynccontextmanager
@@ -36,3 +38,41 @@ app.include_router(music.router)
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── Proxy unmatched requests to lxserver (internal port 9527) ──
+LXSERVER_PORT = int(os.getenv("LXSERVER_PORT", "9527"))
+LXSERVER_BASE = f"http://127.0.0.1:{LXSERVER_PORT}"
+
+EXCLUDED_PREFIXES = ("/api/",)
+
+
+async def _proxy(request: Request):
+    client = httpx.AsyncClient(base_url=LXSERVER_BASE, timeout=30.0)
+    path = request.url.path
+    query = str(request.url.query)
+    url = f"{path}?{query}" if query else path
+    try:
+        r = await client.request(
+            method=request.method,
+            url=url,
+            headers={k: v for k, v in request.headers.items()
+                     if k.lower() not in ("host", "content-length")},
+            content=await request.body(),
+            follow_redirects=True,
+        )
+        return StreamingResponse(
+            r.aiter_bytes(),
+            status_code=r.status_code,
+            headers={k: v for k, v in r.headers.items()
+                     if k.lower() not in ("transfer-encoding", "content-encoding")},
+        )
+    finally:
+        await client.aclose()
+
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+async def catch_all(request: Request, path: str):
+    if path.startswith("api/"):
+        return {"detail": "Not Found"}, 404
+    return await _proxy(request)

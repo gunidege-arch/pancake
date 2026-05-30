@@ -2,29 +2,10 @@ services:
   - type: web
     name: pancake-backend
     runtime: python
-    buildCommand: cd backend && pip install -r requirements.txt && cd music-api && npm install
+    buildCommand: cd backend && pip install -r requirements.txt && cd music-api && npm install && mkdir -p ../lxserver-app && cd ../lxserver-app && wget -q -O server.zip https://github.com/xcq0607/lxserver/releases/download/v1.9.3/lx-music-sync-server-v1.9.3-server.zip && unzip -o server.zip && rm server.zip && mkdir -p lx-music-sync-server/data/users/source/_open && wget -q -O lx-music-sync-server/data/users/source/_open/sixyin.js https://raw.githubusercontent.com/pdone/lx-music-source/main/sixyin/latest.js
     startCommand: cd backend && bash start.sh
     envVars:
       - key: MUSIC_API_URL
         value: http://127.0.0.1:3001
-      - key: LXSERVER_URL
-        value: https://pancake-music.onrender.com
-
-  - type: web
-    name: pancake-music
-    runtime: docker
-    dockerfilePath: backend/lxserver/Dockerfile
-    dockerContext: backend/lxserver
-    envVars:
-      - key: PORT
+      - key: LXSERVER_PORT
         value: "9527"
-      - key: BIND_IP
-        value: 0.0.0.0
-      - key: FRONTEND_PASSWORD
-        value: pancake2024
-      - key: ENABLE_WEBPLAYER_AUTH
-        value: "false"
-      - key: PLAYER_ENABLE_AUTH
-        value: "false"
-      - key: TZ
-        value: Asia/Shanghai

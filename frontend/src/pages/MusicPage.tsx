@@ -1,16 +1,17 @@
 import { useState, useEffect } from "react";
 
 export default function MusicPage() {
-  const [lxserverUrl, setLxserverUrl] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    fetch("/api/music/lxserver")
-      .then((r) => r.json())
-      .then((d) => setLxserverUrl(d.url || ""))
-      .catch(() => setLxserverUrl(""));
+    fetch("/music", { method: "HEAD" })
+      .then((r) => { if (r.ok) setReady(true); })
+      .catch(() => {})
+      .finally(() => setChecking(false));
   }, []);
 
-  if (lxserverUrl === null) {
+  if (checking) {
     return (
       <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div className="music-visualizer">
@@ -20,14 +21,14 @@ export default function MusicPage() {
     );
   }
 
-  if (!lxserverUrl) {
+  if (!ready) {
     return (
       <div style={{ height: "100dvh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: "3.5rem", marginBottom: "0.75rem", opacity: 0.5 }}>&#x266B;</div>
-          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0, fontWeight: 500 }}>音乐服务未配置</p>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0, fontWeight: 500 }}>音乐服务未就绪</p>
           <p style={{ color: "var(--text-muted)", fontSize: "0.72rem", marginTop: "0.25rem", opacity: 0.5 }}>
-            请在后端设置 LXSERVER_URL 环境变量
+            请确保 lxserver 已正确部署
           </p>
         </div>
       </div>
@@ -36,7 +37,7 @@ export default function MusicPage() {
 
   return (
     <iframe
-      src={lxserverUrl + "/music"}
+      src="/music"
       style={{
         width: "100%",
         height: "100dvh",
