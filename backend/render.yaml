@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: pancake-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt && cd music-api && npm install
+    startCommand: bash start.sh
+    envVars:
+      - key: MUSIC_API_URL
+        value: http://127.0.0.1:3001

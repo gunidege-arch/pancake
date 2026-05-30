@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import List
 from urllib.parse import parse_qs, urlparse
 from fastapi import APIRouter, Query
@@ -9,8 +10,10 @@ from ..schemas import MusicTrack, MusicSearchResponse
 
 router = APIRouter(prefix="/api/music", tags=["music"])
 
-METING_API = "https://meting.elysium-stack.cn/api"
+NODE_API = os.getenv("MUSIC_API_URL", "http://127.0.0.1:3001")
 
+# ── Elysium fallback (used when Node.js is unavailable) ──
+METING_API = "https://meting.elysium-stack.cn/api"
 METING_SERVERS = [
     {"id": "netease", "name": "网易云"},
     {"id": "kugou", "name": "酷狗"},
@@ -28,19 +31,40 @@ def _extract_song_id(url_str: str) -> str:
         return ""
 
 
-@router.get("/search", response_model=MusicSearchResponse)
-async def search_music(q: str = Query(..., min_length=1)):
+async def _try_node_search(q: str) -> List[MusicTrack]:
+    """Try Node.js music API server first."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{NODE_API}/search", params={"q": q})
+            resp.raise_for_status()
+            data = resp.json()
+            return [MusicTrack(**t) for t in data.get("tracks", [])]
+    except Exception:
+        return []
+
+
+async def _try_node_play(track_id: str) -> dict:
+    """Try Node.js music API server for URL resolution."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{NODE_API}/play", params={"id": track_id})
+            if resp.status_code == 200:
+                return resp.json()
+    except Exception:
+        pass
+    return {}
+
+
+async def _fallback_search(q: str) -> List[MusicTrack]:
+    """Search via Elysium Meting + QQ Music API."""
     tracks: List[MusicTrack] = []
 
     async def search_meting(svr: dict):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(METING_API, params={
-                    "server": svr["id"],
-                    "type": "search",
-                    "id": q,
-                    "page": 1,
-                    "limit": 20,
+                    "server": svr["id"], "type": "search", "id": q,
+                    "page": 1, "limit": 20,
                 })
                 resp.raise_for_status()
                 data = resp.json()
@@ -58,11 +82,9 @@ async def search_music(q: str = Query(..., min_length=1)):
                             continue
                         tracks.append(MusicTrack(
                             id=f"{svr['id']}:{song_id}",
-                            title=title,
-                            artist=author,
+                            title=title, artist=author,
                             cover_url=item.get("pic", ""),
-                            audio_url=proxy_url,
-                            duration=None,
+                            audio_url=proxy_url, duration=None,
                             source_name=svr["name"],
                         ))
         except Exception:
@@ -93,10 +115,8 @@ async def search_music(q: str = Query(..., min_length=1)):
                     cover = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{albummid}.jpg" if albummid else ""
                     tracks.append(MusicTrack(
                         id=f"tencent:{songmid}",
-                        title=song.get("songname", ""),
-                        artist=artist,
-                        cover_url=cover,
-                        audio_url="",
+                        title=song.get("songname", ""), artist=artist,
+                        cover_url=cover, audio_url="",
                         duration=song.get("interval", None),
                         source_name="QQ音乐",
                     ))
@@ -107,50 +127,29 @@ async def search_music(q: str = Query(..., min_length=1)):
         *(search_meting(s) for s in METING_SERVERS),
         search_qq(q),
     )
-
-    seen = set()
-    unique = []
-    for t in tracks:
-        if t.id not in seen:
-            seen.add(t.id)
-            unique.append(t)
-
-    return MusicSearchResponse(query=q, tracks=unique)
+    return tracks
 
 
-@router.get("/play")
-async def play_music(id: str = Query(..., min_length=1)):
-    parts = id.split(":", 1)
-    server = parts[0] if len(parts) == 2 else "netease"
-    song_id = parts[1] if len(parts) == 2 else parts[0]
-
+async def _fallback_play(server: str, song_id: str):
+    """Resolve audio URL via Elysium Meting."""
     if server == "netease":
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-                # Get fresh proxy URL via type=song (includes auth)
                 resp = await client.get(METING_API, params={
-                    "server": "netease",
-                    "type": "song",
-                    "id": song_id,
+                    "server": "netease", "type": "song", "id": song_id,
                 })
                 data = resp.json()
                 proxy_url = data[0].get("url", "") if isinstance(data, list) and data else ""
-                if not proxy_url:
-                    return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
-                # Follow proxy redirect to get final audio URL
-                resp2 = await client.get(proxy_url)
-                return {"url": str(resp2.url), "br": 0}
+                if proxy_url:
+                    resp2 = await client.get(proxy_url)
+                    return {"url": str(resp2.url), "br": 0}
         except Exception:
-            return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
-
-    if server == "kugou":
+            pass
+    elif server == "kugou":
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-                # type=song may fail, try type=url with auth extracted from song lookup
                 resp = await client.get(METING_API, params={
-                    "server": "kugou",
-                    "type": "song",
-                    "id": song_id,
+                    "server": "kugou", "type": "song", "id": song_id,
                 })
                 if resp.status_code == 200:
                     data = resp.json()
@@ -159,19 +158,9 @@ async def play_music(id: str = Query(..., min_length=1)):
                         resp2 = await client.get(proxy_url)
                         if resp2.status_code == 200:
                             return {"url": str(resp2.url), "br": 0}
-                # Fallback: try direct type=url (may return 401)
-                resp3 = await client.get(METING_API, params={
-                    "server": "kugou",
-                    "type": "url",
-                    "id": song_id,
-                })
-                if resp3.status_code == 200:
-                    return {"url": str(resp3.url), "br": 0}
-                return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
         except Exception:
-            return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
-
-    if server == "tencent":
+            pass
+    elif server == "tencent":
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
@@ -189,8 +178,44 @@ async def play_music(id: str = Query(..., min_length=1)):
                     purl = midurlinfo[0].get("purl", "")
                     if purl:
                         return {"url": f"https://isure6.stream.qqmusic.qq.com/{purl}", "br": 0}
-                return JSONResponse({"url": "", "error": "无法获取QQ音乐播放地址"}, status_code=502)
         except Exception:
-            return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+            pass
+    return {}
 
-    return JSONResponse({"url": "", "error": "未知音源"}, status_code=400)
+
+# ── Routes ───────────────────────────────────
+
+@router.get("/search", response_model=MusicSearchResponse)
+async def search_music(q: str = Query(..., min_length=1)):
+    # Try Node.js first, fall back to Elysium
+    tracks = await _try_node_search(q)
+    if not tracks:
+        tracks = await _fallback_search(q)
+
+    seen = set()
+    unique = []
+    for t in tracks:
+        if t.id not in seen:
+            seen.add(t.id)
+            unique.append(t)
+
+    return MusicSearchResponse(query=q, tracks=unique)
+
+
+@router.get("/play")
+async def play_music(id: str = Query(..., min_length=1)):
+    # Try Node.js first
+    result = await _try_node_play(id)
+    if result.get("url"):
+        return result
+
+    # Fallback to Elysium
+    parts = id.split(":", 1)
+    server = parts[0] if len(parts) == 2 else "netease"
+    song_id = parts[1] if len(parts) == 2 else parts[0]
+
+    result = await _fallback_play(server, song_id)
+    if result.get("url"):
+        return result
+
+    return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
