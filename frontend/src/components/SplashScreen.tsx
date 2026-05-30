@@ -7,7 +7,7 @@ type Mode = "search" | "music" | "wallpaper";
 const MODE_CONFIG: Record<Mode, { title: string[]; hint: string }> = {
   search: {
     title: ["别", "问", "了", "自", "己", "搜"],
-    hint: "轻触任意位置进入",
+    hint: "轻触任意位置进入搜索",
   },
   music: {
     title: ["静", "下", "来", "听", "一", "首"],
@@ -100,8 +100,8 @@ export default function SplashScreen() {
   }, [phase]);
 
   const handleEnter = useCallback(() => {
-    if (!displayMode || phase === "exit") return;
-    const path = `/${displayMode}`;
+    if (phase === "exit") return;
+    const path = displayMode ? `/${displayMode}` : "/search";
     setPhase("exit");
     setTimeout(() => {
       setRemoved(true);
@@ -117,8 +117,8 @@ export default function SplashScreen() {
 
   if (removed) return null;
 
-  const config = displayMode ? MODE_CONFIG[displayMode] : null;
-  const showHint = displayMode !== null && phase === "idle";
+  const config = displayMode ? MODE_CONFIG[displayMode] : MODE_CONFIG.search;
+  const showHint = phase === "idle";
 
   return (
     <div
