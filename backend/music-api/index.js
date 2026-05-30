@@ -8,6 +8,8 @@ const PORT = process.env.MUSIC_API_PORT || 3001;
 const app = express();
 const METING = "https://meting.elysium-stack.cn/api";
 
+const trackMeta = new Map();
+
 // ── Elysium fallback search ──────────────────
 async function elysiumSearch(keyword) {
   const tracks = [];
@@ -46,7 +48,6 @@ app.get("/search", async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json({ tracks: [] });
 
-  // Try direct APIs + QQ Music
   const directResults = await Promise.allSettled([
     searchNetease(q),
     searchKugou(q),
@@ -60,6 +61,7 @@ app.get("/search", async (req, res) => {
       for (const t of r.value) {
         if (!seen.has(t.id)) {
           seen.add(t.id);
+          if (t.extra) trackMeta.set(t.id, t.extra);
           tracks.push(t);
         }
       }
@@ -91,13 +93,14 @@ app.get("/play", async (req, res) => {
 
   try {
     let result = null;
+    const meta = trackMeta.get(id) || {};
 
     if (server === "netease") {
       result = await getNeteaseUrl(songId);
     } else if (server === "kugou") {
-      result = await getKugouUrl(songId);
+      result = await getKugouUrl(songId, meta.album_id || "");
     } else if (server === "tencent") {
-      result = await getQQUrl(songId);
+      result = await getQQUrl(songId, meta.strMediaMid || "");
     }
 
     if (result?.url) {

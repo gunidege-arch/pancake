@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import axios from "axios";
 
 export async function searchQQ(keyword, limit = 20) {
@@ -25,19 +24,22 @@ export async function searchQQ(keyword, limit = 20) {
       audio_url: "",
       duration: s.interval || 0,
       source_name: "QQ音乐",
+      extra: { strMediaMid: s.strMediaMid || s.songmid || "" },
     };
   });
 }
 
-export async function getQQUrl(songMid) {
-  const guid = (Math.random() * 10000000).toFixed(0);
-  const uin = process.env.QQ_UIN || "0";
+export async function getQQUrl(songMid, strMediaMid = "") {
+  const guid = "10000";
+  const uin = "0";
+  const file = strMediaMid ? `M500${strMediaMid}.mp3` : `M500${songMid}${songMid}.mp3`;
 
   const reqData = {
     req_0: {
       module: "vkey.GetVkeyServer",
       method: "CgiGetVkey",
       param: {
+        filename: [file],
         guid,
         songmid: [songMid],
         songtype: [0],
@@ -45,6 +47,13 @@ export async function getQQUrl(songMid) {
         loginflag: 1,
         platform: "20",
       },
+    },
+    loginUin: uin,
+    comm: {
+      uin,
+      format: "json",
+      ct: 24,
+      cv: 0,
     },
   };
 
@@ -60,18 +69,11 @@ export async function getQQUrl(songMid) {
     timeout: 10000,
   });
 
-  const purl = resp.data?.req_0?.data?.midurlinfo?.[0]?.purl;
-  if (purl) {
-    return { url: `https://isure6.stream.qqmusic.qq.com/${purl}`, br: 0 };
-  }
+  const midurlinfo = resp.data?.req_0?.data?.midurlinfo?.[0];
+  const purl = midurlinfo?.purl;
+  if (!purl) return null;
 
-  // Try alternative CDN
-  const cdnList = [
-    "http://ws.stream.qqmusic.qq.com/",
-    "https://isure6.stream.qqmusic.qq.com/",
-  ];
-  for (const cdn of cdnList) {
-    if (purl) return { url: cdn + purl, br: 0 };
-  }
-  return null;
+  const sip = resp.data?.req_0?.data?.sip || [];
+  const baseUrl = sip[0] || "https://isure6.stream.qqmusic.qq.com/";
+  return { url: baseUrl + purl, br: 0 };
 }

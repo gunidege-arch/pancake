@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from typing import List
 from urllib.parse import parse_qs, urlparse
@@ -38,7 +39,11 @@ async def _try_node_search(q: str) -> List[MusicTrack]:
             resp = await client.get(f"{NODE_API}/search", params={"q": q})
             resp.raise_for_status()
             data = resp.json()
-            return [MusicTrack(**t) for t in data.get("tracks", [])]
+            tracks = []
+            for t in data.get("tracks", []):
+                t.pop("extra", None)
+                tracks.append(MusicTrack(**t))
+            return tracks
     except Exception:
         return []
 
@@ -131,7 +136,6 @@ async def _fallback_search(q: str) -> List[MusicTrack]:
 
 
 async def _fallback_play(server: str, song_id: str):
-    """Resolve audio URL via Elysium Meting."""
     if server == "netease":
         try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
@@ -147,37 +151,68 @@ async def _fallback_play(server: str, song_id: str):
             pass
     elif server == "kugou":
         try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://wwwapi.kugou.com/yy/index.php?r=play/getdata"
+                    f"&hash={song_id}&platid=4&album_id="
+                    f"&mid=00000000000000000000000000000000",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                data = resp.json()
+                if data.get("status") == 1 and data["data"].get("privilege", 10) <= 9:
+                    url = data["data"].get("play_backup_url") or data["data"].get("play_url", "")
+                    if url:
+                        return {"url": url, "br": 0}
+        except Exception:
+            pass
+        # Fallback to Elysium for kugou
+        try:
             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
                 resp = await client.get(METING_API, params={
                     "server": "kugou", "type": "song", "id": song_id,
                 })
-                if resp.status_code == 200:
-                    data = resp.json()
-                    proxy_url = data[0].get("url", "") if isinstance(data, list) and data else ""
-                    if proxy_url:
-                        resp2 = await client.get(proxy_url)
-                        if resp2.status_code == 200:
-                            return {"url": str(resp2.url), "br": 0}
+                data = resp.json()
+                proxy_url = data[0].get("url", "") if isinstance(data, list) and data else ""
+                if proxy_url:
+                    resp2 = await client.get(proxy_url)
+                    return {"url": str(resp2.url), "br": 0}
         except Exception:
             pass
     elif server == "tencent":
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
+                file = f"M500{song_id}{song_id}.mp3"
+                req_data = {
+                    "req_0": {
+                        "module": "vkey.GetVkeyServer",
+                        "method": "CgiGetVkey",
+                        "param": {
+                            "filename": [file],
+                            "guid": "10000",
+                            "songmid": [song_id],
+                            "songtype": [0],
+                            "uin": "0",
+                            "loginflag": 1,
+                            "platform": "20",
+                        },
+                    },
+                    "loginUin": "0",
+                    "comm": {"uin": "0", "format": "json", "ct": 24, "cv": 0},
+                }
                 resp = await client.get(
                     "https://u.y.qq.com/cgi-bin/musicu.fcg",
-                    params={
-                        "format": "json",
-                        "data": f'{{"req_0":{{"module":"vkey.GetVkeyServer","method":"CgiGetVkey","param":{{"guid":"0","songmid":["{song_id}"],"songtype":[0],"uin":"0","loginflag":1,"platform":"20"}}}}}}',
-                    },
+                    params={"format": "json", "data": json.dumps(req_data)},
                     headers={"User-Agent": "Mozilla/5.0"},
                 )
                 resp.raise_for_status()
                 data = resp.json()
                 midurlinfo = data.get("req_0", {}).get("data", {}).get("midurlinfo", [])
+                sip = data.get("req_0", {}).get("data", {}).get("sip", [])
                 if midurlinfo and len(midurlinfo) > 0:
                     purl = midurlinfo[0].get("purl", "")
                     if purl:
-                        return {"url": f"https://isure6.stream.qqmusic.qq.com/{purl}", "br": 0}
+                        base = sip[0] if sip else "https://isure6.stream.qqmusic.qq.com/"
+                        return {"url": base + purl, "br": 0}
         except Exception:
             pass
     return {}

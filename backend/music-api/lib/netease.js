@@ -3,9 +3,15 @@ import axios from "axios";
 
 const EAPI_KEY = "e82ckenh8dichen8";
 
-function aesEncrypt(text, key) {
-  const pad = 16 - (text.length % 16);
-  const padded = Buffer.concat([text, Buffer.alloc(pad, pad)]);
+function md5(str) {
+  return crypto.createHash("md5").update(str).digest("hex");
+}
+
+function aesEncrypt(text) {
+  const key = Buffer.from(EAPI_KEY);
+  const data = Buffer.from(text);
+  const pad = 16 - (data.length % 16);
+  const padded = Buffer.concat([data, Buffer.alloc(pad, pad)]);
   const cipher = crypto.createCipheriv("aes-128-ecb", key, null);
   cipher.setAutoPadding(false);
   return Buffer.concat([cipher.update(padded), cipher.final()])
@@ -13,22 +19,18 @@ function aesEncrypt(text, key) {
     .toUpperCase();
 }
 
-function md5(str) {
-  return crypto.createHash("md5").update(str).digest("hex");
+function eapi(url, object) {
+  const text = typeof object === "object" ? JSON.stringify(object) : object;
+  const message = `nobody${url}use${text}md5forencrypt`;
+  const digest = md5(message);
+  const data = `${url}-36cd479b6b5-${text}-36cd479b6b5-${digest}`;
+  return { params: aesEncrypt(data) };
 }
 
-export function eapiEncrypt(url, data) {
-  const text = JSON.stringify(data);
-  const digest = md5(`nobody${url}use${text}md5forencrypt`);
-  const body = `${url}-36cd479b6b5-${text}-36cd479b6b5-${digest}`;
-  return { params: aesEncrypt(Buffer.from(body), Buffer.from(EAPI_KEY)) };
-}
-
-const QUALITY_MAP = {
-  "128k": "standard",
-  "320k": "exhigh",
-  flac: "lossless",
-  hires: "hires",
+const QUALITY_BR = {
+  "128k": 128000,
+  "320k": 320000,
+  flac: 999000,
 };
 
 export async function searchNetease(keyword, limit = 20) {
@@ -39,6 +41,8 @@ export async function searchNetease(keyword, limit = 20) {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       "Content-Type": "application/x-www-form-urlencoded",
+      "Referer": "https://music.163.com/",
+      "Cookie": "os=pc; appver=2.10.6; NMTID=00O9v6kGqFvXJxJJXJmIJmIJnFnFnF;",
     },
     timeout: 10000,
   });
@@ -55,27 +59,30 @@ export async function searchNetease(keyword, limit = 20) {
   }));
 }
 
-export async function getNeteaseUrl(songId, quality = "standard") {
-  const path = "/api/song/enhance/player/url/v1";
-  const url = "https://interface.music.163.com/eapi/song/enhance/player/url/v1";
-  const level = QUALITY_MAP[quality] || "standard";
-  const MUSIC_U = process.env.NETEASE_MUSIC_U || "";
+let cookie = "os=pc";
+const MUSIC_U = process.env.NETEASE_MUSIC_U || "";
+if (MUSIC_U) cookie = `MUSIC_U=${MUSIC_U}; ` + cookie;
 
-  const resp = await axios.post(url, eapiEncrypt(path, {
-    ids: JSON.stringify([songId]),
-    level,
-    encodeType: "mp3",
-  }), {
+export async function getNeteaseUrl(songId, quality = "128k") {
+  const br = QUALITY_BR[quality] || 128000;
+  const targetUrl = "https://interface3.music.163.com/eapi/song/enhance/player/url";
+  const eapiUrl = "/api/song/enhance/player/url";
+
+  const d = { ids: `[${songId}]`, br };
+  const data = eapi(eapiUrl, d);
+
+  const resp = await axios.post(targetUrl, new URLSearchParams(data).toString(), {
     headers: {
-      "User-Agent": "NeteaseMusic/9.3.0.250516233250(9003000);Dalvik/2.1.0 (Linux; U; Android 12; ABR-AL80 Build/9b35a01.0)",
-      Cookie: `MUSIC_U=${MUSIC_U};`,
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Content-Type": "application/x-www-form-urlencoded",
+      Cookie: cookie,
     },
     timeout: 10000,
   });
 
-  const data = resp.data?.data?.[0];
-  if (data?.url) {
-    return { url: data.url.split("?")[0], br: data.br || 0 };
+  const song = resp.data?.data?.[0];
+  if (song?.url && !song.freeTrialInfo) {
+    return { url: song.url, br: song.br || 0 };
   }
   return null;
 }
