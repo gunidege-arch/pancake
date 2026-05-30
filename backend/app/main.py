@@ -37,7 +37,13 @@ app.include_router(music.router)
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    try:
+        async with httpx.AsyncClient(base_url=LXSERVER_BASE, timeout=5.0) as c:
+            await c.get("/")
+        lxserver_ok = True
+    except Exception:
+        lxserver_ok = False
+    return {"status": "ok", "lxserver": lxserver_ok}
 
 
 # ── Proxy unmatched requests to lxserver (internal port 9527) ──
@@ -67,6 +73,8 @@ async def _proxy(request: Request):
             headers={k: v for k, v in r.headers.items()
                      if k.lower() not in ("transfer-encoding", "content-encoding")},
         )
+    except httpx.ConnectError:
+        return {"detail": "lxserver not running"}, 502
     finally:
         await client.aclose()
 
