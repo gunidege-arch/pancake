@@ -262,3 +262,26 @@ LXSERVER_URL = os.getenv("LXSERVER_URL", "")
 @router.get("/lxserver")
 async def get_lxserver_url():
     return {"url": LXSERVER_URL}
+
+
+@router.get("/lyric")
+async def get_lyric(id: str = Query(..., min_length=1)):
+    parts = id.split(":", 1)
+    server = parts[0] if len(parts) == 2 else "netease"
+    song_id = parts[1] if len(parts) == 2 else parts[0]
+
+    if server == "netease":
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                data = resp.json()
+                lrc = data.get("lrc", {}).get("lyric", "")
+                tlyric = data.get("tlyric", {}).get("lyric", "")
+                return {"lyric": lrc, "tlyric": tlyric}
+        except Exception:
+            pass
+
+    return {"lyric": "", "tlyric": ""}
