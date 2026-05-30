@@ -254,3 +254,11 @@ async def play_music(id: str = Query(..., min_length=1)):
         return result
 
     return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+
+
+LXSERVER_URL = os.getenv("LXSERVER_URL", "")
+
+
+@router.get("/lxserver")
+async def get_lxserver_url():
+    return {"url": LXSERVER_URL}

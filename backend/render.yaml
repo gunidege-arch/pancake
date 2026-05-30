@@ -7,3 +7,28 @@ services:
     envVars:
       - key: MUSIC_API_URL
         value: http://127.0.0.1:3001
+      - key: LXSERVER_URL
+        value: https://pancake-music.onrender.com
+
+  - type: web
+    name: pancake-music
+    runtime: docker
+    dockerfilePath: ./lxserver/Dockerfile
+    dockerContext: ./lxserver
+    envVars:
+      - key: PORT
+        value: "9527"
+      - key: BIND_IP
+        value: 0.0.0.0
+      - key: FRONTEND_PASSWORD
+        value: pancake2024
+      - key: ENABLE_WEBPLAYER_AUTH
+        value: "false"
+      - key: PLAYER_ENABLE_AUTH
+        value: "false"
+      - key: TZ
+        value: Asia/Shanghai
+    disk:
+      name: lxserver-data
+      mountPath: /server/data
+      sizeGB: 1

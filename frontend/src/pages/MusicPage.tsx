@@ -1,6 +1,7 @@
 import { useMusic } from "../hooks/useMusic";
 import MusicPlayer from "../components/MusicPlayer";
 import SearchBar from "../components/SearchBar";
+import { useState, useEffect } from "react";
 
 function fmtDuration(s: number) {
   if (!s || !isFinite(s)) return "";
@@ -11,6 +12,14 @@ function fmtDuration(s: number) {
 
 export default function MusicPage() {
   const m = useMusic();
+  const [lxserverUrl, setLxserverUrl] = useState("");
+
+  useEffect(() => {
+    fetch("/api/music/lxserver")
+      .then((r) => r.json())
+      .then((d) => setLxserverUrl(d.url || ""))
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{ height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -20,10 +29,33 @@ export default function MusicPage() {
           display: "flex", alignItems: "center", justifyContent: "center",
           padding: "0.75rem 1rem",
           paddingTop: "calc(3.5rem + env(safe-area-inset-top, 0px))",
+          flexWrap: "wrap", gap: "0.5rem",
         }}>
-          <div style={{ width: "100%", maxWidth: 500 }}>
+          <div style={{ flex: 1, maxWidth: 500, minWidth: 200 }}>
             <SearchBar onSearch={m.search} loading={m.loading} autoFocus={false} />
           </div>
+          {lxserverUrl && (
+            <a
+              href={lxserverUrl + "/music"}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.35rem",
+                padding: "0.5rem 0.9rem",
+                background: "var(--accent)", color: "#fff",
+                borderRadius: "8px", fontSize: "0.8rem", fontWeight: 600,
+                textDecoration: "none", whiteSpace: "nowrap",
+                transition: "opacity .15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+              完整播放器
+            </a>
+          )}
         </div>
 
         {/* Error */}
@@ -103,6 +135,22 @@ export default function MusicPage() {
               <p style={{ color: "var(--text-muted)", fontSize: "0.72rem", marginTop: "0.25rem", opacity: 0.5 }}>
                 网易云 · QQ音乐 · 酷狗 全平台搜索
               </p>
+              {lxserverUrl && (
+                <a
+                  href={lxserverUrl + "/music"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-block", marginTop: "1rem",
+                    padding: "0.5rem 1.2rem",
+                    background: "var(--accent)", color: "#fff",
+                    borderRadius: "20px", fontSize: "0.85rem", fontWeight: 600,
+                    textDecoration: "none",
+                  }}
+                >
+                  打开完整播放器（歌词·歌单·无损）
+                </a>
+              )}
             </div>
           </div>
         )}
