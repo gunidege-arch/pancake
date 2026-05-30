@@ -1,5 +1,6 @@
 import asyncio
 from typing import List
+from urllib.parse import parse_qs, urlparse
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 import httpx
@@ -8,33 +9,30 @@ from ..schemas import MusicTrack, MusicSearchResponse
 
 router = APIRouter(prefix="/api/music", tags=["music"])
 
-METING_API = "https://api.injahow.cn/meting/"
+METING_API = "https://meting.elysium-stack.cn/api"
 
-SERVERS = [
+METING_SERVERS = [
     {"id": "netease", "name": "网易云"},
-    {"id": "tencent", "name": "QQ音乐"},
     {"id": "kugou", "name": "酷狗"},
 ]
 
 
-def _build_cover(server: str, pic_id: str) -> str:
-    """Build cover URL from Meting API pic_id."""
-    if not pic_id:
+def _extract_song_id(url_str: str) -> str:
+    if not url_str:
         return ""
-    if server == "netease":
-        return f"https://p2.music.126.net/{pic_id}/{pic_id}.jpg"
-    if server == "tencent":
-        return f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{pic_id}.jpg"
-    if server == "kugou" and pic_id:
-        return pic_id if pic_id.startswith("http") else f"https://imge.kugou.com/{pic_id}"
-    return ""
+    try:
+        params = parse_qs(urlparse(url_str).query)
+        ids = params.get("id", [])
+        return ids[0] if ids else ""
+    except Exception:
+        return ""
 
 
 @router.get("/search", response_model=MusicSearchResponse)
 async def search_music(q: str = Query(..., min_length=1)):
     tracks: List[MusicTrack] = []
 
-    async def search_server(svr: dict):
+    async def search_meting(svr: dict):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(METING_API, params={
@@ -50,25 +48,66 @@ async def search_music(q: str = Query(..., min_length=1)):
                     for item in data:
                         if not isinstance(item, dict):
                             continue
-                        sid = str(item.get("id", item.get("song_id", item.get("songid", ""))))
-                        if not sid:
+                        title = item.get("title", "")
+                        author = item.get("author", "")
+                        proxy_url = item.get("url", "")
+                        if not title or not proxy_url:
+                            continue
+                        song_id = _extract_song_id(proxy_url)
+                        if not song_id:
                             continue
                         tracks.append(MusicTrack(
-                            id=f"{svr['id']}:{sid}",
-                            title=item.get("name", item.get("title", item.get("songname", "Unknown"))),
-                            artist="、".join(item.get("artist", item.get("artists", []))) if isinstance(item.get("artist"), list) else item.get("artist", item.get("singer", item.get("author", ""))),
-                            album=item.get("album", item.get("albumname", item.get("album_name"))),
-                            cover_url=_build_cover(svr["id"], item.get("pic_id", item.get("picid", ""))) or item.get("pic", item.get("cover", "")),
-                            audio_url="",  # resolved on-demand via /play
-                            duration=item.get("duration", item.get("interval")),
+                            id=f"{svr['id']}:{song_id}",
+                            title=title,
+                            artist=author,
+                            cover_url=item.get("pic", ""),
+                            audio_url=proxy_url,
+                            duration=None,
                             source_name=svr["name"],
                         ))
         except Exception:
             pass
 
-    await asyncio.gather(*(search_server(s) for s in SERVERS))
+    async def search_qq(q_param: str):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://c.y.qq.com/soso/fcgi-bin/client_search_cp",
+                    params={"w": q_param, "format": "json", "n": 20},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                songs = data.get("data", {}).get("song", {}).get("list", [])
+                if not isinstance(songs, list):
+                    return
+                for song in songs:
+                    if not isinstance(song, dict):
+                        continue
+                    songmid = song.get("songmid", "")
+                    if not songmid:
+                        continue
+                    singer_list = song.get("singer", [])
+                    artist = "、".join(s.get("name", "") for s in singer_list) if isinstance(singer_list, list) else ""
+                    albummid = song.get("albummid", "")
+                    cover = f"https://y.gtimg.cn/music/photo_new/T002R300x300M000{albummid}.jpg" if albummid else ""
+                    tracks.append(MusicTrack(
+                        id=f"tencent:{songmid}",
+                        title=song.get("songname", ""),
+                        artist=artist,
+                        cover_url=cover,
+                        audio_url="",
+                        duration=song.get("interval", None),
+                        source_name="QQ音乐",
+                    ))
+        except Exception:
+            pass
 
-    # Dedup by id
+    await asyncio.gather(
+        *(search_meting(s) for s in METING_SERVERS),
+        search_qq(q),
+    )
+
     seen = set()
     unique = []
     for t in tracks:
@@ -81,21 +120,51 @@ async def search_music(q: str = Query(..., min_length=1)):
 
 @router.get("/play")
 async def play_music(id: str = Query(..., min_length=1)):
-    """Resolve playable audio URL for a track."""
     parts = id.split(":", 1)
     server = parts[0] if len(parts) == 2 else "netease"
     song_id = parts[1] if len(parts) == 2 else parts[0]
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(METING_API, params={
-                "server": server,
-                "type": "url",
-                "id": song_id,
-            })
-            resp.raise_for_status()
-            data = resp.json()
-            url = data.get("url", "") if isinstance(data, dict) else ""
-            return {"url": url, "br": data.get("br", 0) if isinstance(data, dict) else 0}
-    except Exception:
-        return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+    if server in ("netease", "kugou"):
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                resp = await client.get(METING_API, params={
+                    "server": server,
+                    "type": "url",
+                    "id": song_id,
+                })
+                if resp.status_code != 200:
+                    return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+                # Elysium returns 302 redirect or JSON with url field
+                ct = resp.headers.get("content-type", "")
+                if "json" in ct:
+                    data = resp.json()
+                    url = data.get("url", "") if isinstance(data, dict) else ""
+                    return {"url": url, "br": 0}
+                else:
+                    return {"url": str(resp.url), "br": 0}
+        except Exception:
+            return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+
+    if server == "tencent":
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://u.y.qq.com/cgi-bin/musicu.fcg",
+                    params={
+                        "format": "json",
+                        "data": f'{{"req_0":{{"module":"vkey.GetVkeyServer","method":"CgiGetVkey","param":{{"guid":"0","songmid":["{song_id}"],"songtype":[0],"uin":"0","loginflag":1,"platform":"20"}}}}}}',
+                    },
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                midurlinfo = data.get("req_0", {}).get("data", {}).get("midurlinfo", [])
+                if midurlinfo and len(midurlinfo) > 0:
+                    purl = midurlinfo[0].get("purl", "")
+                    if purl:
+                        return {"url": f"https://isure6.stream.qqmusic.qq.com/{purl}", "br": 0}
+                return JSONResponse({"url": "", "error": "无法获取QQ音乐播放地址"}, status_code=502)
+        except Exception:
+            return JSONResponse({"url": "", "error": "获取播放地址失败"}, status_code=502)
+
+    return JSONResponse({"url": "", "error": "未知音源"}, status_code=400)
