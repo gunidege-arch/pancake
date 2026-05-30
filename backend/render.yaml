@@ -28,7 +28,3 @@ services:
         value: "false"
       - key: TZ
         value: Asia/Shanghai
-    disk:
-      name: lxserver-data
-      mountPath: /server/data
-      sizeGB: 1
