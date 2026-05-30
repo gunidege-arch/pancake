@@ -45,3 +45,36 @@ class SearchResultItem(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: List[SearchResultItem]
+
+
+# ── Music ───────────────────────────────────────────
+
+class MusicSourceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    api_url_template: str = Field(..., min_length=1, max_length=800)
+    device_id: str = Field(..., min_length=1, max_length=64)
+
+
+class MusicSourceResponse(BaseModel):
+    id: int
+    name: str
+    api_url_template: str
+    is_builtin: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class MusicTrack(BaseModel):
+    id: str
+    title: str
+    artist: str
+    album: Optional[str] = None
+    cover_url: Optional[str] = None
+    audio_url: str
+    duration: Optional[int] = None  # seconds
+    source_name: str
+
+
+class MusicSearchResponse(BaseModel):
+    query: str
+    tracks: List[MusicTrack]

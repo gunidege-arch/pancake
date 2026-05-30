@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import init_db
-from .routers import sources, search
+from .routers import sources, search, music
 
 
 @asynccontextmanager
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(sources.router)
 app.include_router(search.router)
+app.include_router(music.router)
 
 
 @app.get("/api/health")
