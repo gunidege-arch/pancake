@@ -8,6 +8,7 @@ import BookmarksPanel from "../components/BookmarksPanel";
 import NavContent from "../components/NavContent";
 import BottomSheet from "../components/BottomSheet";
 import SourceManager from "../components/SourceManager";
+import SearchLottie from "../components/SearchLottie";
 
 /* ── Settings types ─────────────────────────────────────── */
 type Theme = "dark" | "light";
@@ -293,7 +294,7 @@ export default function SearchPage() {
           {!results && !loading && !error && (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: "3rem", marginBottom: "0.75rem", opacity: 0.6 }}>&#128270;</div>
+                <SearchLottie />
                 <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0 }}>输入关键词，别问了自己搜</p>
                 <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: "0.25rem", opacity: 0.6 }}>
                   支持视频识别、内容提取、嵌入式预览
