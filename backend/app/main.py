@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from .database import init_db
-from .routers import sources, search, music
+from .routers import sources, search
 import httpx
 
 
@@ -32,7 +32,6 @@ app.add_middleware(
 
 app.include_router(sources.router)
 app.include_router(search.router)
-app.include_router(music.router)
 
 
 @app.get("/api/health")
@@ -81,6 +80,4 @@ async def _proxy(request: Request):
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
 async def catch_all(request: Request, path: str):
-    if path.startswith("api/"):
-        return {"detail": "Not Found"}, 404
     return await _proxy(request)
