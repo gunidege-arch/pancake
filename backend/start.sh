@@ -9,7 +9,7 @@ echo "[start] Node: $(node --version 2>&1 || echo 'MISSING')"
 if command -v node &>/dev/null && [ -f lxserver-app/lx-music-sync-server/server/index.js ]; then
   echo "[start] Launching lxserver on port ${LXSERVER_PORT:-9527}..."
   cd lxserver-app/lx-music-sync-server
-  PORT="${LXSERVER_PORT:-9527}" node index.js &
+  PORT="${LXSERVER_PORT:-9527}" FRONTEND_PASSWORD="3523074052" node index.js &
   cd "$SCRIPT_DIR"
   echo "[start] lxserver PID: $!"
 else
