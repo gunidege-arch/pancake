@@ -11,7 +11,7 @@ export default function MusicPage() {
         display: "block",
       }}
       title="LX Music"
-      allow="autoplay; clipboard-write"
+      allow="autoplay; clipboard-write; screen-wake-lock"
     />
   );
 }
