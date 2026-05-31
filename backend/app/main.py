@@ -49,21 +49,30 @@ async def health():
 LXSERVER_PORT = int(os.getenv("LXSERVER_PORT", "9527"))
 LXSERVER_BASE = f"http://127.0.0.1:{LXSERVER_PORT}"
 
-EXCLUDED_PREFIXES = ("/api/",)
-
 
 async def _proxy(request: Request):
     client = httpx.AsyncClient(base_url=LXSERVER_BASE, timeout=30.0)
     path = request.url.path
     query = str(request.url.query)
     url = f"{path}?{query}" if query else path
+
+    # Only read body for methods that have one
+    body = None
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        try:
+            body = await request.body()
+        except Exception:
+            body = None
+
+    headers = {k: v for k, v in request.headers.items()
+               if k.lower() not in ("host", "content-length")}
+
     try:
         r = await client.request(
             method=request.method,
             url=url,
-            headers={k: v for k, v in request.headers.items()
-                     if k.lower() not in ("host", "content-length")},
-            content=await request.body(),
+            headers=headers,
+            content=body,
             follow_redirects=True,
         )
         return StreamingResponse(
@@ -74,6 +83,8 @@ async def _proxy(request: Request):
         )
     except httpx.ConnectError:
         return {"detail": "lxserver not running"}, 502
+    except Exception:
+        return {"detail": "proxy error"}, 502
     finally:
         await client.aclose()
 
